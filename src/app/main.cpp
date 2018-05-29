@@ -1,19 +1,38 @@
 #pragma once
+#include "main.h"
 #include "lib.h"
+#include "standards.h"
 #include <iostream>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <wx/wx.h>
 
-int main(int argc, const char **argv) {
-	std::mutex mut;
-
-	Eraser::overwriteBytes("hello", 4096 * 1024, "hello", [&](size_t progress, size_t fileSize) -> void {
-		std::lock_guard<std::mutex> lock(mut);
-		std::cout << "bytes written:\t" << progress << "\ttotal bytes:\t" << fileSize << "\tprogress:\t"
-		          << static_cast<double>(100) * static_cast<double>(progress) / static_cast<double>(fileSize) << "%"
-		          << std::endl;
-	});
-
-	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+bool App::OnInit() {
+	static std::mutex mut;
+	try {
+		Eraser::overwriteBytesMultiple("hello", 1024 * 512, standards::GUTMANN,
+		                               [&](size_t progress, size_t fileSize, size_t pass) -> void {
+			                               std::lock_guard<std::mutex> lock(mut);
+			                               std::cout << "pass:\t" << pass << "\tbytes written:\t" << progress
+			                                         << "\ttotal bytes:\t" << fileSize << "\tprogress:\t"
+			                                         << static_cast<double>(100) * static_cast<double>(progress) /
+			                                                static_cast<double>(fileSize)
+			                                         << "%" << std::endl;
+		                               },
+		                               [&](size_t fileSize, size_t) -> void {
+			                               std::lock_guard<std::mutex> lock(mut);
+			                               std::cout << "complete!" << std::endl;
+		                               });
+	} catch (const std::runtime_error &e) {
+		std::cout << e.what() << std::endl;
+	}
+	frame_ = new Frame();
+	return true;
 }
+
+#ifdef NDEBUG
+IMPLEMENT_APP(App);
+#else
+IMPLEMENT_APP_CONSOLE(App);
+#endif
