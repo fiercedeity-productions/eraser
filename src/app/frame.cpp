@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <numeric>
 #include <regex>
+#include <set>
+#include <sys/stat.h>
 #include <wx/statline.h>
 
 wxDEFINE_EVENT(UPDATE, wxCommandEvent); // for updating the progress bar
@@ -12,9 +14,16 @@ wxDEFINE_EVENT(UPDATE, wxCommandEvent); // for updating the progress bar
 BEGIN_EVENT_TABLE(Frame, wxFrame)
 EVT_COMMAND(wxID_ANY, UPDATE, Frame::onUpdate)
 EVT_TEXT(wxID_FILE1, Frame::onChangeText)
+EVT_TEXT_ENTER(wxID_FILE1, Frame::onEnter)
 EVT_BUTTON(wxID_FILE2, Frame::addFileDialog)
 EVT_BUTTON(wxID_FILE3, Frame::addDirDialog)
 END_EVENT_TABLE()
+
+struct insensitiveComp {
+	bool operator()(const std::string &a, const std::string &b) {
+		return stricmp(a.c_str(), b.c_str()) < 0;
+	}
+};
 
 Frame::Frame()
     : wxFrame(nullptr, wxID_HOME, "Eraser") {
@@ -80,6 +89,30 @@ void Frame::addFileDialog(wxCommandEvent &evt) {
 	std::vector<std::string> paths;
 	std::transform(wxPaths.begin(), wxPaths.end(), std::back_inserter(paths), [](wxString str) { return str.ToStdString(); });
 
+	// count the number of invaid paths
+	// TODO: also erase if already in the queue
+	size_t      removedPaths = 0;
+	std::string removedPath;
+	paths.erase(std::remove_if(paths.begin(), paths.end(),
+	                           [&](std::string path) {
+		                           struct stat perms;
+		                           int         res = stat(path.c_str(), &perms);
+		                           if (~perms.st_mode & (S_IWRITE | S_IREAD) || res == -1) {
+			                           ++removedPaths;
+			                           removedPath = path;
+			                           return true;
+		                           }
+		                           return false;
+	                           }),
+	            paths.end());
+
+	if (removedPaths > 0)
+		wxMessageBox(removedPaths == 1
+		                 ? "\"" + removedPath + "\" does not exist or is unable to be accessed. It will not be added."
+		                 : std::to_string(removedPaths) +
+		                       " of these files do not exist or are unable to be accessed. They will not be added.",
+		             "Invalid Files", 5L, this);
+
 	// separate the paths by semicolons
 	std::string text;
 	text = std::accumulate(std::next(paths.begin()), paths.end(), *paths.begin(),
@@ -93,6 +126,16 @@ void Frame::addDirDialog(wxCommandEvent &evt) {
 	wxDirDialog dirDialog(this, "Select Folder to be Erased", "", wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
 	if (dirDialog.ShowModal() == wxID_CANCEL)
 		return; // discontinue computation if user cancels
+
+	std::string path = dirDialog.GetPath().ToStdString();
+	// check permissions
+	// TODO: also erase if already in the queue
+	struct stat perms;
+	int         res = stat(path.c_str(), &perms);
+	if (~perms.st_mode & (S_IWRITE | S_IREAD) || res == -1) {
+		wxMessageBox("Insufficient permissions for \"" + path + "\". It will not be added.", "Folder Permissions", 5L, this);
+		return;
+	}
 
 	// set the textbox text
 	pathCtrl_->ChangeValue(dirDialog.GetPath());
@@ -112,44 +155,23 @@ void Frame::onChangeText(wxCommandEvent &evt) {
 	long selBeg, selEnd;
 	pathCtrl_->GetSelection(&selBeg, &selEnd);
 
-	std::string value =
-	    std::regex_replace(evt.GetString().ToStdString(), std::regex(";(?!\\s)"), "; "); // replace ";" with "; "
-	size_t                   elementBegin = 0;
-	size_t                   cursor       = 0;
-	std::vector<std::string> splitPaths;
+	// replace \ by / or vice versa
+
+	char dirSeparator;
+	char replaceDirSeparator;
 
 #if defined(unix) || defined(__unix__) || defined(__unix)
-	std::replace(userValue.begin(), userValue.end(), '\\', '/');
-	pathCtrl_->ChangeValue(userValue);
-	pathCtrl_->SetInsertionPoint(ins);
-	pathCtrl_->SetSelection(selBeg, selEnd);
+	dirSeparator        = '/';
+	replaceDirSeparator = '\\';
 #else
-	std::replace(userValue.begin(), userValue.end(), '/', '\\');
-	pathCtrl_->ChangeValue(userValue);
-	pathCtrl_->SetInsertionPoint(ins);
-	pathCtrl_->SetSelection(selBeg, selEnd);
+	dirSeparator        = '\\';
+	replaceDirSeparator = '/';
 #endif
 
-	// split the text by "; "
-	while (cursor < value.length()) {
-		if (value.length() - cursor > 1 && value.substr(cursor, 2) == "; ") {
-			splitPaths.push_back(value.substr(elementBegin, cursor - elementBegin));
-			cursor += 2;
-			elementBegin = cursor;
-			continue;
-		} else if (cursor == value.length() - 1) {
-			splitPaths.push_back(value.substr(elementBegin));
-		}
-
-		++cursor;
-	}
-
-	// remove empty items in the vector (e.g.: "a;b;;c")
-	//												^ empty item
-	std::remove_if(splitPaths.begin(), splitPaths.end(), [](std::string str) { return str.empty(); });
-
-	// for (auto i = splitPaths.begin(); i != splitPaths.end(); ++i)
-	// 	wxPuts(std::to_string(i - splitPaths.begin()) + " " + *i);
+	std::replace(userValue.begin(), userValue.end(), replaceDirSeparator, dirSeparator);
+	pathCtrl_->ChangeValue(userValue);
+	pathCtrl_->SetInsertionPoint(ins);
+	pathCtrl_->SetSelection(selBeg, selEnd);
 
 	// calculate the current element being edited
 	size_t editBeg =
@@ -169,25 +191,32 @@ void Frame::onChangeText(wxCommandEvent &evt) {
 	// only suggest possibilities if the cursor is at the end of the editing field
 	if (ins == editEnd) {
 		// get path
+		std::string parent;
+		bool        root =
+		    std::count_if(field.begin(), field.end(), [=](char c) { return c == dirSeparator; }) == 1 && field[0] != '.';
 #if defined(unix) || defined(__unix__) || defined(__unix)
-		std::string parent;
-		bool        root = std::count_if(field.begin(), field.end(), [](char c) { return c == '/'; }) == 1;
-		if (root)
-			parent = "/";
+		if (root && field[0] == dirSeparator)
+			parent = dirSeparator;
+		else if (field[0] != '.')
+			parent = field.substr(0, field.find_last_of(dirSeparator));
 		else
-			parent = field.substr(0, field.find_last_of('/'));
+			return;
 #else
-		std::string parent;
-		bool        root = std::count_if(field.begin(), field.end(), [](char c) { return c == '\\'; }) == 1;
-		if (root && field[0] == '\\')
-			parent = '\\';
+		if (root && field[0] == dirSeparator)
+			parent = dirSeparator;
 		else if (root && field.length() >= 3)
 			parent = field.substr(0, 3);
-		else if (field.length() >= 3)
-			parent = field.substr(0, field.find_last_of('\\'));
+		else if (field.length() >= 3 && field[0] != '.')
+			parent = field.substr(0, field.find_last_of(dirSeparator));
+		else
+			return;
 #endif
 		for (const auto &file : std::experimental::filesystem::directory_iterator(parent)) {
-			std::string filePath    = file.path().string();
+			std::string filePath = file.path().string();
+			// if filePath is a directory, add a trailing "/" or "\"
+			if (std::experimental::filesystem::is_directory(filePath)) {
+				filePath += dirSeparator;
+			}
 			std::string matchedArea = filePath.substr(0, field.length());
 
 			// transform into lower case for comparison on windows only (non-*nix systems)
@@ -196,6 +225,11 @@ void Frame::onChangeText(wxCommandEvent &evt) {
 			std::transform(matchedArea.begin(), matchedArea.end(), matchedArea.begin(), ::tolower);
 			std::transform(field.begin(), field.end(), std::back_inserter(fieldAdjusted), ::tolower);
 #endif
+
+			struct stat perms;
+			stat(filePath.c_str(), &perms);
+			if (~perms.st_mode & (S_IWRITE | S_IREAD))
+				continue;
 
 			if (fieldAdjusted == matchedArea) {
 				std::string suggestion = filePath.substr(field.length());
@@ -208,6 +242,9 @@ void Frame::onChangeText(wxCommandEvent &evt) {
 }
 
 void Frame::onKeyDown(wxKeyEvent &evt) {
+	long selBeg, selEnd;
+	pathCtrl_->GetSelection(&selBeg, &selEnd);
+
 	if (evt.GetKeyCode() == 27) { // delete the suggestion if escape is pressed
 		wxPuts("yes");
 		allowEdits_ = false;
@@ -217,13 +254,107 @@ void Frame::onKeyDown(wxKeyEvent &evt) {
 		allowEdits_ = false;
 		evt.Skip();
 	} else if (evt.GetKeyCode() == 9) { // use tab to complete autocomplete
-		long selBeg, selEnd;
-		pathCtrl_->GetSelection(&selBeg, &selEnd);
 		pathCtrl_->SetSelection(selEnd, selEnd);
 		pathCtrl_->SetInsertionPoint(selEnd);
 		evt.StopPropagation(); // do not skip as tab would be inserted
+	} else if (evt.GetKeyCode() == 13 && selEnd > selBeg) {
+		pathCtrl_->SetSelection(selEnd, selEnd);
+		pathCtrl_->SetInsertionPoint(selEnd);
+		evt.Skip(); // skip to allow onenter to be triggered
 	} else {
 		allowEdits_ = true;
 		evt.Skip();
 	}
+}
+
+void Frame::onEnter(wxCommandEvent &evt) {
+	if (evt.GetString().IsEmpty())
+		return; // do nothing if the textbox is empty
+		        // replace all / with \ or \ with / depending on os
+
+	std::string value =
+	    std::regex_replace(evt.GetString().ToStdString(), std::regex(";(?!\\s)"), "; "); // replace ";" with "; "
+	size_t elementBegin = 0;
+	size_t cursor       = 0;
+
+	std::set<std::string, insensitiveComp> splitPaths;
+
+	// split the text by "; "
+	while (cursor < value.length()) {
+		if (value.length() - cursor > 1 && value.substr(cursor, 2) == "; ") {
+			splitPaths.insert(value.substr(elementBegin, cursor - elementBegin));
+			cursor += 2;
+			elementBegin = cursor;
+			continue;
+		} else if (cursor == value.length() - 1) {
+			splitPaths.insert(value.substr(elementBegin));
+		}
+
+		++cursor;
+	}
+
+	// add trailing "/" or "\" if folder
+	char dirSeparator;
+	char replaceDirSeparator;
+
+#if defined(unix) || defined(__unix__) || defined(__unix)
+	dirSeparator        = '/';
+	replaceDirSeparator = '\\';
+#else
+	dirSeparator        = '\\';
+	replaceDirSeparator = '/';
+#endif
+	for (auto i = splitPaths.begin(); i != splitPaths.end();) {
+		if (std::experimental::filesystem::is_directory(i->c_str()) && i->back() != dirSeparator) {
+			splitPaths.insert(std::string(i->c_str()) + dirSeparator);
+			i = splitPaths.erase(i);
+		} else
+			++i;
+	}
+
+	// remove empty items in the vector (e.g.: "a;b;;c")
+	//												^ empty item
+	// TODO: also erase if already in the queue
+
+	size_t      removedPaths = 0;
+	std::string removedPath;
+	for (auto i = splitPaths.begin(); i != splitPaths.end();) {
+		struct stat perms;
+		int         res = stat(i->c_str(), &perms);
+
+		if (i->empty() || ~perms.st_mode & (S_IWRITE | S_IREAD) || res == -1 || *i->c_str() == '.') {
+			if (!i->empty())
+				++removedPaths;
+			removedPath = i->c_str();
+			i           = splitPaths.erase(i);
+		} else
+			++i;
+	}
+
+	if (removedPaths > 0)
+		wxMessageBox(removedPaths == 1
+		                 ? "\"" + removedPath + "\" does not exist or is unable to be accessed. It will not be added."
+		                 : std::to_string(removedPaths) +
+		                       " of these paths do not exist or are unable to accessed. They will not be added.",
+		             "Invalid Paths", 5L, this);
+
+	// join the splitPaths vector and set that value to the pathCtrl_
+	if (!splitPaths.empty())
+		pathCtrl_->ChangeValue(std::accumulate(std::next(splitPaths.begin()), splitPaths.end(), *splitPaths.begin(),
+		                                       [](std::string a, std::string b) { return a + "; " + b; }));
+	else
+		pathCtrl_->Clear();
+
+	// discontinue computation if the split paths is empty after the above validation
+	if (splitPaths.empty())
+		return;
+
+	pathCtrl_->SetSelection(pathCtrl_->GetValue().length(), pathCtrl_->GetValue().length());
+
+	// finally add to the queue
+	for (auto i : splitPaths)
+		addToQueue(i);
+}
+
+void Frame::addToQueue(std::string path) {
 }

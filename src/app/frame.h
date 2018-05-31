@@ -28,8 +28,11 @@ class Frame : public wxFrame {
 	void onUpdate(wxCommandEvent &evt);
 	void onChangeText(wxCommandEvent &evt);
 	void onKeyDown(wxKeyEvent &evt);
+	void onEnter(wxCommandEvent &evt);
 	void addFileDialog(wxCommandEvent &evt);
 	void addDirDialog(wxCommandEvent &evt);
+
+	void addToQueue(std::string path);
 
 	bool allowEdits_;
 
