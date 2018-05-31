@@ -31,7 +31,7 @@ class Frame : public wxFrame {
 	void addFileDialog(wxCommandEvent &evt);
 	void addDirDialog(wxCommandEvent &evt);
 
-	bool allowEdits;
+	bool allowEdits_;
 
   public:
 	Frame();

@@ -99,7 +99,7 @@ void Frame::addDirDialog(wxCommandEvent &evt) {
 }
 
 void Frame::onChangeText(wxCommandEvent &evt) {
-	if (!allowEdits)
+	if (!allowEdits_)
 		return;
 	// get the value of the textbox
 	std::string userValue = evt.GetString().ToStdString();
@@ -210,11 +210,11 @@ void Frame::onChangeText(wxCommandEvent &evt) {
 void Frame::onKeyDown(wxKeyEvent &evt) {
 	if (evt.GetKeyCode() == 27) { // delete the suggestion if escape is pressed
 		wxPuts("yes");
-		allowEdits = false;
+		allowEdits_ = false;
 		pathCtrl_->RemoveSelection();
 		evt.Skip();
 	} else if (evt.GetKeyCode() == 8) { // do not activate autocomplete if backspace is entered
-		allowEdits = false;
+		allowEdits_ = false;
 		evt.Skip();
 	} else if (evt.GetKeyCode() == 9) { // use tab to complete autocomplete
 		long selBeg, selEnd;
@@ -223,7 +223,7 @@ void Frame::onKeyDown(wxKeyEvent &evt) {
 		pathCtrl_->SetInsertionPoint(selEnd);
 		evt.StopPropagation(); // do not skip as tab would be inserted
 	} else {
-		allowEdits = true;
+		allowEdits_ = true;
 		evt.Skip();
 	}
 }
