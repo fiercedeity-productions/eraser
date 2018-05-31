@@ -1,8 +1,8 @@
 #pragma once
-#include <wx/listctrl.h>
+#include <wx/dataview.h>
 #include <wx/wx.h>
 
-extern const wxEventTypeTag<wxCommandEvent> UPDATE;
+extern const wxEventTypeTag<wxCommandEvent> UPDATE_PROGRESS;
 
 class Frame : public wxFrame {
   private:
@@ -16,26 +16,32 @@ class Frame : public wxFrame {
 	wxBoxSizer *addSizer_;
 	wxBoxSizer *controlsSizer_;
 
-	wxTextCtrl *pathCtrl_;
-	wxButton *  addFiles_;
-	wxButton *  addFolder_;
-	wxListCtrl *queueCtrl_;
-	wxButton *  controlButton_;
-	wxGauge *   progress_;
+	wxTextCtrl *      pathCtrl_;
+	wxButton *        addFiles_;
+	wxButton *        addFolder_;
+	wxButton *        controlButton_;
+	wxGauge *         progress_;
+	wxDataViewColumn *queueCtrlCol1_, *queueCtrlCol2_, *queueCtrlCol3_;
 
 	double borderSize_ = 8;
+	bool   allowEdits_;
 
-	void onUpdate(wxCommandEvent &evt);
+	void onUpdateProgress(wxCommandEvent &evt);
 	void onChangeText(wxCommandEvent &evt);
 	void onKeyDown(wxKeyEvent &evt);
+	void onQueueKeyDown(wxKeyEvent &evt);
 	void onEnter(wxCommandEvent &evt);
 	void addFileDialog(wxCommandEvent &evt);
 	void addDirDialog(wxCommandEvent &evt);
 
 	void addToQueue(std::string path);
 
-	bool allowEdits_;
+	void onSize(wxSizeEvent &evt);
+	void onSelection(wxDataViewEvent &evt);
 
   public:
+	wxDataViewListCtrl *queueCtrl_;
+	void                resizeColumns();
 	Frame();
+	~Frame();
 };

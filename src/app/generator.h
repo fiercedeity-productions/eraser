@@ -1,3 +1,4 @@
+#pragma once
 #include <wx/statline.h>
 #include <wx/wx.h>
 

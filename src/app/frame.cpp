@@ -1,6 +1,7 @@
 #pragma once
 #include "frame.h"
 #include "generator.h"
+#include "storeddata.h"
 #include "task.h"
 #include <filesystem>
 #include <numeric>
@@ -9,14 +10,16 @@
 #include <sys/stat.h>
 #include <wx/statline.h>
 
-wxDEFINE_EVENT(UPDATE, wxCommandEvent); // for updating the progress bar
+wxDEFINE_EVENT(UPDATE_PROGRESS, wxCommandEvent); // for updating the progress bar
 
 BEGIN_EVENT_TABLE(Frame, wxFrame)
-EVT_COMMAND(wxID_ANY, UPDATE, Frame::onUpdate)
+EVT_COMMAND(wxID_ANY, UPDATE_PROGRESS, Frame::onUpdateProgress)
 EVT_TEXT(wxID_FILE1, Frame::onChangeText)
 EVT_TEXT_ENTER(wxID_FILE1, Frame::onEnter)
 EVT_BUTTON(wxID_FILE2, Frame::addFileDialog)
 EVT_BUTTON(wxID_FILE3, Frame::addDirDialog)
+EVT_SIZE(Frame::onSize)
+EVT_DATAVIEW_SELECTION_CHANGED(wxID_PROPERTIES, Frame::onSelection)
 END_EVENT_TABLE()
 
 struct insensitiveComp {
@@ -39,7 +42,8 @@ Frame::Frame()
 	sizer_         = new wxBoxSizer(wxVERTICAL);
 	addSizer_      = new wxBoxSizer(wxHORIZONTAL);
 	controlsSizer_ = new wxBoxSizer(wxHORIZONTAL);
-	queueCtrl_     = new wxListCtrl(panel_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT);
+	queueCtrl_     = new wxDataViewListCtrl(panel_, wxID_PROPERTIES, wxDefaultPosition, wxDefaultSize,
+                                        wxDV_MULTIPLE | wxDV_HORIZ_RULES | wxDV_VERT_RULES);
 
 	pathCtrl_  = new wxTextCtrl(panel_, wxID_FILE1, wxEmptyString, wxDefaultPosition, wxDefaultSize,
                                wxTE_PROCESS_TAB | wxTE_PROCESS_ENTER);
@@ -65,13 +69,30 @@ Frame::Frame()
 	sizer_->Add(controlsSizer_, wxSizerFlags(0).Expand().Border(wxALL & ~wxUP));
 
 	pathCtrl_->Bind(wxEVT_CHAR, &Frame::onKeyDown, this); // use to catch key presses like tab and backspace
+	queueCtrl_->Bind(wxEVT_CHAR, &Frame::onQueueKeyDown, this);
+
+	// configure the property grid
+	queueCtrlCol1_ = queueCtrl_->AppendTextColumn("Path", wxDATAVIEW_CELL_INERT);
+	queueCtrlCol2_ = queueCtrl_->AppendTextColumn("Status", wxDATAVIEW_CELL_INERT, wxCOL_WIDTH_AUTOSIZE);
+	queueCtrlCol3_ = queueCtrl_->AppendProgressColumn("Progress", wxDATAVIEW_CELL_INERT);
+
+	queueCtrlCol1_->SetResizeable(false);
+	queueCtrlCol2_->SetResizeable(false);
+	queueCtrlCol3_->SetResizeable(false);
 
 	panel_->SetSizerAndFit(sizer_);
 	SetSize(800 * scalingFactor_, 600 * scalingFactor_);
 	Show();
+	resizeColumns();
+	Task::setFrame(this);
 }
 
-void Frame::onUpdate(wxCommandEvent &evt) {
+Frame::~Frame() {
+	// empty the array of task pointers
+	Task::empty();
+}
+
+void Frame::onUpdateProgress(wxCommandEvent &evt) {
 	// wxPuts("update");
 }
 
@@ -97,7 +118,7 @@ void Frame::addFileDialog(wxCommandEvent &evt) {
 	                           [&](std::string path) {
 		                           struct stat perms;
 		                           int         res = stat(path.c_str(), &perms);
-		                           if (~perms.st_mode & (S_IWRITE | S_IREAD) || res == -1) {
+		                           if (~perms.st_mode & (S_IWRITE | S_IREAD) || res == -1 || Task::inQueue(path)) {
 			                           ++removedPaths;
 			                           removedPath = path;
 			                           return true;
@@ -120,6 +141,9 @@ void Frame::addFileDialog(wxCommandEvent &evt) {
 
 	// set the textbox text
 	pathCtrl_->ChangeValue(text);
+	// add to the queue
+	for (std::string str : paths)
+		addToQueue(str);
 }
 
 void Frame::addDirDialog(wxCommandEvent &evt) {
@@ -132,13 +156,15 @@ void Frame::addDirDialog(wxCommandEvent &evt) {
 	// TODO: also erase if already in the queue
 	struct stat perms;
 	int         res = stat(path.c_str(), &perms);
-	if (~perms.st_mode & (S_IWRITE | S_IREAD) || res == -1) {
+	if (~perms.st_mode & (S_IWRITE | S_IREAD) || res == -1 || Task::inQueue(path)) {
 		wxMessageBox("Insufficient permissions for \"" + path + "\". It will not be added.", "Folder Permissions", 5L, this);
 		return;
 	}
 
 	// set the textbox text
-	pathCtrl_->ChangeValue(dirDialog.GetPath());
+	pathCtrl_->ChangeValue(path);
+	// add to queue
+	addToQueue(path);
 }
 
 void Frame::onChangeText(wxCommandEvent &evt) {
@@ -246,7 +272,6 @@ void Frame::onKeyDown(wxKeyEvent &evt) {
 	pathCtrl_->GetSelection(&selBeg, &selEnd);
 
 	if (evt.GetKeyCode() == 27) { // delete the suggestion if escape is pressed
-		wxPuts("yes");
 		allowEdits_ = false;
 		pathCtrl_->RemoveSelection();
 		evt.Skip();
@@ -322,7 +347,7 @@ void Frame::onEnter(wxCommandEvent &evt) {
 		struct stat perms;
 		int         res = stat(i->c_str(), &perms);
 
-		if (i->empty() || ~perms.st_mode & (S_IWRITE | S_IREAD) || res == -1 || *i->c_str() == '.') {
+		if (i->empty() || ~perms.st_mode & (S_IWRITE | S_IREAD) || res == -1 || *i->c_str() == '.' || Task::inQueue(*i)) {
 			if (!i->empty())
 				++removedPaths;
 			removedPath = i->c_str();
@@ -357,4 +382,40 @@ void Frame::onEnter(wxCommandEvent &evt) {
 }
 
 void Frame::addToQueue(std::string path) {
+	Task::add(path);
+}
+
+void Frame::resizeColumns() {
+	queueCtrlCol1_->SetWidth(queueCtrl_->GetSize().GetX() - queueCtrlCol2_->GetWidth() - (scalingFactor_ * 128));
+	queueCtrlCol3_->SetWidth(128);
+}
+
+void Frame::onSize(wxSizeEvent &evt) {
+	resizeColumns();
+	evt.Skip();
+}
+
+void Frame::onSelection(wxDataViewEvent &evt) {
+	wxDataViewItemArray sel;
+	queueCtrl_->GetSelections(sel);
+	if (!sel.empty())
+		wxPuts(reinterpret_cast<StoredData *>(queueCtrl_->GetItemData(sel[0]))->task->getPath());
+}
+
+void Frame::onQueueKeyDown(wxKeyEvent &evt) {
+	// if del is entered, remove the selections
+	if (evt.GetKeyCode() == 127) {
+		wxDataViewItemArray sel;
+		queueCtrl_->GetSelections(sel);
+
+		for (auto i : sel) {
+			Task *task = reinterpret_cast<StoredData *>(queueCtrl_->GetItemData(i))->task;
+			if (!task->isLocked()) {
+				Task::removeByTaskPtr(task);
+				queueCtrl_->DeleteItem(queueCtrl_->ItemToRow(i));
+			}
+		}
+	}
+
+	evt.Skip();
 }
