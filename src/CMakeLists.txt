@@ -15,8 +15,8 @@ file(GLOB APP_SOURCES ${CMAKE_SOURCE_DIR}/app/*.cpp)
 add_library(${PROJECT_NAME} SHARED ${LIB_HEADERS} ${LIB_SOURCES})
 
 set(CMAKE_CXX_FLAGS_DEBUG "/MTd /ZI")
-set(CMAKE_CXX_FLAGS_RELEASE "/MT")
-set(CMAKE_CXX_FLAGS_MINSIZEREL "/MT")
+set(CMAKE_CXX_FLAGS_RELEASE "/MT /Ox /fp:fast")
+set(CMAKE_CXX_FLAGS_MINSIZEREL "/MT /Ox /fp:fast")
 
 add_executable(start-${PROJECT_NAME} ${APP_HEADERS} ${APP_SOURCES})
 target_link_libraries(start-${PROJECT_NAME} ${PROJECT_NAME})

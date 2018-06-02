@@ -20,7 +20,8 @@ void Eraser::validateSettings(const std::string &path, const size_t &chunkSize) 
 	std::ofstream file(path, std::ios::binary | std::ios::in);
 	if (chunkSize < 4096)
 		errorMessage = "Chunk size must be 4096 bytes or larger!";
-	else if (!std::experimental::filesystem::is_regular_file(path))
+	else if (!std::experimental::filesystem::is_regular_file(path) && !std::experimental::filesystem::is_block_file(path) &&
+	         !std::experimental::filesystem::is_character_file(path))
 		errorMessage = "File does not exist!";
 	else if (!file.is_open())
 		errorMessage = "Error writing to file!";

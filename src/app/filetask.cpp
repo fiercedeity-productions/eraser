@@ -1,25 +1,71 @@
 #pragma once
 #include "filetask.h"
+#include "lib.h"
+#include <filesystem>
+#include <iomanip>
+#include <sstream>
+#include <thread>
 
-FileTask::FileTask(const std::string &path)
-    : Task(path) {
-	wxPuts("is file path");
-	wxPuts(std::to_string(Task::getTasks().size()));
+FileTask::FileTask(const std::string &path, const standards::standard &mode)
+    : Task(path, mode) {
+	// replace "Calculating" displayed by the datactrl to the actual value
+	// frameInstance->queueCtrl_->SetValue(std::to_string(getSize()), frameInstance->queueCtrl_->ItemToRow(queueRow_), 2);
+	updateSize();
 }
 
-bool FileTask::isIncluded(const std::string &path) const {
-#if defined(unix) || defined(__unix__) || defined(__unix)
-	// case sensitive comparison
-	return path == path_;
-#else
-	// case insensitive comparison; requires copies
+const bool FileTask::isIncluded(const std::string &path) const {
+	return std::experimental::filesystem::equivalent(path, path_) && !completed_;
+}
 
-	std::string testPath   = path;
-	std::string storedPath = path_;
+const size_t FileTask::getSize() const {
+	return Eraser::getSize(path_);
+};
 
-	std::transform(testPath.begin(), testPath.end(), testPath.begin(), ::tolower);
-	std::transform(storedPath.begin(), storedPath.end(), storedPath.begin(), ::tolower);
+void FileTask::execute() {
+	updateStatus("Writing...");
+	std::thread([&]() {
+		try {
+			updateSize();
+			locked_ = true;
+			wxPuts("begin");
+			Eraser::overwriteBytesMultiple(
+			    path_, 4096 * 1024, standards::STANDARDS[mode_],
+			    [&](size_t a, size_t b, size_t c) {
+				    double proportion =
+				        static_cast<double>((c * b) + a) / static_cast<double>(b * standards::STANDARDS[mode_].size());
+				    std::stringstream summary;
+				    summary << std::setprecision(3) << 100.0 * proportion;
 
-	return testPath == storedPath;
-#endif
+				    std::thread(&FileTask::updateStatus, this, std::string("Writing: ") + summary.str() + "%").detach();
+
+				    std::thread(&FileTask::updateProgressBar, this, proportion).detach();
+			    },
+			    [&](size_t, size_t) {
+				    // mark the file as deleted
+				    std::experimental::filesystem::remove(path_);
+
+				    std::thread(&FileTask::updateProgressBar, this, 1).detach();
+				    locked_    = false;
+				    error_     = false;
+				    completed_ = true;
+				    updateStatus("Completed");
+
+				    // call the next task
+				    wxQueueEvent(frameInstance, new wxCommandEvent(CALL_NEXT_TASK));
+				    return;
+			    });
+			wxPuts("end");
+		} catch (std::runtime_error &e) {
+			updateStatus("Error");
+			locked_    = false;
+			completed_ = false;
+			error_     = true;
+			// TODO: support resetting the status
+
+			// call the next task
+			errorMessage_ = e.what();
+			wxQueueEvent(frameInstance, new wxCommandEvent(CALL_NEXT_TASK));
+		}
+	})
+	    .detach();
 }

@@ -1,8 +1,10 @@
 #pragma once
 #include "frame.h"
 #include "generator.h"
+#include "standards.h"
 #include "storeddata.h"
 #include "task.h"
+#include "updateprogressdata.h"
 #include <filesystem>
 #include <numeric>
 #include <regex>
@@ -10,16 +12,28 @@
 #include <sys/stat.h>
 #include <wx/statline.h>
 
-wxDEFINE_EVENT(UPDATE_PROGRESS, wxCommandEvent); // for updating the progress bar
+wxDEFINE_EVENT(CALL_NEXT_TASK, wxCommandEvent);
+wxDEFINE_EVENT(UPDATE_VALUE, wxCommandEvent);
+wxDEFINE_EVENT(SET_STATUS, wxCommandEvent);
+wxDEFINE_EVENT(HIDE_STATUS, wxCommandEvent);
+wxDEFINE_EVENT(SHOW_STATUS, wxCommandEvent);
 
 BEGIN_EVENT_TABLE(Frame, wxFrame)
-EVT_COMMAND(wxID_ANY, UPDATE_PROGRESS, Frame::onUpdateProgress)
+EVT_COMMAND(wxID_ANY, CALL_NEXT_TASK, Frame::callNextTask)
+EVT_COMMAND(wxID_ANY, UPDATE_VALUE, Frame::onUpdateValue)
+EVT_COMMAND(wxID_ANY, SET_STATUS, Frame::onSetStatus)
+EVT_COMMAND(wxID_ANY, HIDE_STATUS, Frame::onHideStatus)
+EVT_COMMAND(wxID_ANY, SHOW_STATUS, Frame::onShowStatus)
 EVT_TEXT(wxID_FILE1, Frame::onChangeText)
 EVT_TEXT_ENTER(wxID_FILE1, Frame::onEnter)
 EVT_BUTTON(wxID_FILE2, Frame::addFileDialog)
 EVT_BUTTON(wxID_FILE3, Frame::addDirDialog)
+EVT_CHOICE(wxID_PREFERENCES, Frame::onEdit)
+EVT_BUTTON(wxID_EXECUTE, Frame::onControlButton)
 EVT_SIZE(Frame::onSize)
-EVT_DATAVIEW_SELECTION_CHANGED(wxID_PROPERTIES, Frame::onSelection)
+EVT_DATAVIEW_ITEM_VALUE_CHANGED(wxID_PROPERTIES, Frame::onQueueChanged)
+EVT_DATAVIEW_ITEM_CONTEXT_MENU(wxID_PROPERTIES, Frame::onQueueContextMenu)
+EVT_DATAVIEW_SELECTION_CHANGED(wxID_PROPERTIES, Frame::onChangeSelection)
 END_EVENT_TABLE()
 
 struct insensitiveComp {
@@ -42,44 +56,56 @@ Frame::Frame()
 	sizer_         = new wxBoxSizer(wxVERTICAL);
 	addSizer_      = new wxBoxSizer(wxHORIZONTAL);
 	controlsSizer_ = new wxBoxSizer(wxHORIZONTAL);
-	queueCtrl_     = new wxDataViewListCtrl(panel_, wxID_PROPERTIES, wxDefaultPosition, wxDefaultSize,
-                                        wxDV_MULTIPLE | wxDV_HORIZ_RULES | wxDV_VERT_RULES);
+
+	queueCtrl_ = new wxDataViewListCtrl(panel_, wxID_PROPERTIES, wxDefaultPosition, wxDefaultSize,
+	                                    wxDV_MULTIPLE | wxDV_HORIZ_RULES | wxDV_VERT_RULES);
 
 	pathCtrl_  = new wxTextCtrl(panel_, wxID_FILE1, wxEmptyString, wxDefaultPosition, wxDefaultSize,
                                wxTE_PROCESS_TAB | wxTE_PROCESS_ENTER);
 	addFiles_  = new wxButton(panel_, wxID_FILE2, "Files...", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
 	addFolder_ = new wxButton(panel_, wxID_FILE3, "Folder...", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
 
-	controlButton_ = new wxButton(panel_, wxID_ANY, "Start", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-	progress_ =
-	    new wxGauge(panel_, wxID_ANY, 100, wxDefaultPosition, wxDefaultSize, wxGA_HORIZONTAL | wxGA_SMOOTH | wxGA_PROGRESS);
+	controlButton_ = new wxButton(panel_, wxID_EXECUTE, "Start", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+	controlButton_->Disable(); // disabled initially as queue is initially empty
+
+	// change standards::NAMES vector into a wxVector
+	wxArrayString choices;
+	for (std::string i : standards::NAMES)
+		choices.push_back(i);
+	modeChoice_ = new wxChoice(panel_, wxID_PREFERENCES, wxDefaultPosition, wxDefaultSize, choices);
+	modeChoice_->SetSelection(0); // default selection is the first item
 
 	addSizer_->Add(pathCtrl_, wxSizerFlags(1).Expand().Border(wxRIGHT, borderSize_ * scalingFactor_));
 	addSizer_->Add(addFiles_, wxSizerFlags(0).Expand().Border(wxRIGHT, borderSize_ * scalingFactor_));
 	addSizer_->Add(addFolder_, wxSizerFlags(0).Expand());
 
-	controlsSizer_->Add(controlButton_, wxSizerFlags(0).Expand().Border(wxRIGHT, borderSize_ * scalingFactor_));
-	controlsSizer_->Add(progress_, wxSizerFlags(1).Expand());
+	controlsSizer_->Add(controlButton_, wxSizerFlags(1).Proportion(1).Expand().Border(wxRIGHT, borderSize_ * scalingFactor_));
+	controlsSizer_->Add(modeChoice_, wxSizerFlags(1).Proportion(4).Expand());
 
 	sizer_->Add(Generator::createLabel(panel_, borderSize_, scalingFactor_, "Add Files and Folders"), wxSizerFlags(0).Expand());
-	sizer_->Add(addSizer_, wxSizerFlags(0).Expand().Border(wxALL & ~wxUP & ~wxDOWN));
-	sizer_->Add(Generator::createLabel(panel_, borderSize_, scalingFactor_, "Erase Queue"), wxSizerFlags(0).Expand());
-	sizer_->Add(queueCtrl_, wxSizerFlags(1).Expand().Border(wxALL & ~wxUP & ~wxDOWN));
+	sizer_->Add(addSizer_, wxSizerFlags(0).Expand().Border(wxALL & ~wxUP & ~wxDOWN, borderSize_ * scalingFactor_));
 	sizer_->Add(Generator::createLabel(panel_, borderSize_, scalingFactor_, "Controls"), wxSizerFlags(0).Expand());
-	sizer_->Add(controlsSizer_, wxSizerFlags(0).Expand().Border(wxALL & ~wxUP));
+	sizer_->Add(controlsSizer_, wxSizerFlags(0).Expand().Border(wxALL & ~wxUP & ~wxDOWN, borderSize_ * scalingFactor_));
+	sizer_->Add(Generator::createLabel(panel_, borderSize_, scalingFactor_, "Erase Queue"), wxSizerFlags(0).Expand());
+	sizer_->Add(queueCtrl_, wxSizerFlags(1).Expand().Border(wxALL & ~wxUP, borderSize_ * scalingFactor_));
 
 	pathCtrl_->Bind(wxEVT_CHAR, &Frame::onKeyDown, this); // use to catch key presses like tab and backspace
 	queueCtrl_->Bind(wxEVT_CHAR, &Frame::onQueueKeyDown, this);
 
 	// configure the property grid
 	queueCtrlCol1_ = queueCtrl_->AppendTextColumn("Path", wxDATAVIEW_CELL_INERT);
-	queueCtrlCol2_ = queueCtrl_->AppendTextColumn("Status", wxDATAVIEW_CELL_INERT, wxCOL_WIDTH_AUTOSIZE);
-	queueCtrlCol3_ = queueCtrl_->AppendProgressColumn("Progress", wxDATAVIEW_CELL_INERT);
+	queueCtrlCol2_ = queueCtrl_->AppendTextColumn("Mode", wxDATAVIEW_CELL_INERT, wxCOL_WIDTH_AUTOSIZE);
+	queueCtrlCol3_ = queueCtrl_->AppendTextColumn("Size (Bytes)", wxDATAVIEW_CELL_INERT, wxCOL_WIDTH_AUTOSIZE);
+	queueCtrlCol4_ = queueCtrl_->AppendTextColumn("Status", wxDATAVIEW_CELL_INERT, wxCOL_WIDTH_AUTOSIZE);
+	queueCtrlCol5_ = queueCtrl_->AppendProgressColumn("Progress", wxDATAVIEW_CELL_INERT, scalingFactor_ * 128);
 
 	queueCtrlCol1_->SetResizeable(false);
 	queueCtrlCol2_->SetResizeable(false);
 	queueCtrlCol3_->SetResizeable(false);
+	queueCtrlCol4_->SetResizeable(false);
+	queueCtrlCol5_->SetResizeable(false);
 
+	CreateStatusBar();
 	panel_->SetSizerAndFit(sizer_);
 	SetSize(800 * scalingFactor_, 600 * scalingFactor_);
 	Show();
@@ -92,8 +118,33 @@ Frame::~Frame() {
 	Task::empty();
 }
 
-void Frame::onUpdateProgress(wxCommandEvent &evt) {
-	// wxPuts("update");
+void Frame::onControlButton(wxCommandEvent &evt) {
+	if (!running_) {
+		callNextTask(evt);
+	} else if (running_ && !paused_) {
+		paused_ = true;
+		controlButton_->SetLabelText("Stopping...");
+	} else if (running_ && paused_) {
+		paused_ = false;
+		controlButton_->SetLabelText("Stop");
+	}
+}
+
+void Frame::callNextTask(wxCommandEvent &evt) {
+	if (!paused_) {
+		running_ = Task::callNext();
+		if (running_)
+			controlButton_->SetLabelText("Stop");
+		else
+			controlButton_->SetLabelText("Start");
+	} else {
+		controlButton_->SetLabelText("Start");
+		paused_  = false;
+		running_ = false;
+	}
+
+	onQueueChanged();
+	evt.Skip();
 }
 
 void Frame::addFileDialog(wxCommandEvent &evt) {
@@ -134,6 +185,8 @@ void Frame::addFileDialog(wxCommandEvent &evt) {
 		                       " of these files do not exist or are unable to be accessed. They will not be added.",
 		             "Invalid Files", 5L, this);
 
+	if (paths.empty())
+		return;
 	// separate the paths by semicolons
 	std::string text;
 	text = std::accumulate(std::next(paths.begin()), paths.end(), *paths.begin(),
@@ -141,6 +194,8 @@ void Frame::addFileDialog(wxCommandEvent &evt) {
 
 	// set the textbox text
 	pathCtrl_->ChangeValue(text);
+	// clear queue selection
+	queueCtrl_->SetSelections(wxDataViewItemArray());
 	// add to the queue
 	for (std::string str : paths)
 		addToQueue(str);
@@ -163,6 +218,8 @@ void Frame::addDirDialog(wxCommandEvent &evt) {
 
 	// set the textbox text
 	pathCtrl_->ChangeValue(path);
+	// clear queue selection
+	queueCtrl_->SetSelections(wxDataViewItemArray());
 	// add to queue
 	addToQueue(path);
 }
@@ -376,30 +433,30 @@ void Frame::onEnter(wxCommandEvent &evt) {
 
 	pathCtrl_->SetSelection(pathCtrl_->GetValue().length(), pathCtrl_->GetValue().length());
 
+	// clear queue selection
+	queueCtrl_->SetSelections(wxDataViewItemArray());
 	// finally add to the queue
 	for (auto i : splitPaths)
 		addToQueue(i);
 }
 
 void Frame::addToQueue(std::string path) {
-	Task::add(path);
+	// add to selection
+	wxDataViewItemArray sel;
+	queueCtrl_->GetSelections(sel);
+	sel.push_back(Task::add(path, static_cast<standards::standard>(modeChoice_->GetSelection())));
+	queueCtrl_->SetSelections(sel);
 }
 
 void Frame::resizeColumns() {
-	queueCtrlCol1_->SetWidth(queueCtrl_->GetSize().GetX() - queueCtrlCol2_->GetWidth() - (scalingFactor_ * 128));
-	queueCtrlCol3_->SetWidth(128);
+	queueCtrlCol1_->SetWidth(queueCtrl_->GetSize().GetX() - queueCtrlCol2_->GetWidth() - queueCtrlCol3_->GetWidth() -
+	                         queueCtrlCol4_->GetWidth() - (scalingFactor_ * 128));
+	queueCtrlCol5_->SetWidth(scalingFactor_ * 128);
 }
 
 void Frame::onSize(wxSizeEvent &evt) {
 	resizeColumns();
 	evt.Skip();
-}
-
-void Frame::onSelection(wxDataViewEvent &evt) {
-	wxDataViewItemArray sel;
-	queueCtrl_->GetSelections(sel);
-	if (!sel.empty())
-		wxPuts(reinterpret_cast<StoredData *>(queueCtrl_->GetItemData(sel[0]))->task->getPath());
 }
 
 void Frame::onQueueKeyDown(wxKeyEvent &evt) {
@@ -410,12 +467,139 @@ void Frame::onQueueKeyDown(wxKeyEvent &evt) {
 
 		for (auto i : sel) {
 			Task *task = reinterpret_cast<StoredData *>(queueCtrl_->GetItemData(i))->task;
-			if (!task->isLocked()) {
-				Task::removeByTaskPtr(task);
-				queueCtrl_->DeleteItem(queueCtrl_->ItemToRow(i));
-			}
+			Task::removeByTaskPtr(task);
 		}
 	}
 
 	evt.Skip();
+}
+
+void Frame::onEdit(wxCommandEvent &evt) {
+	// edit selections!
+	for (auto i : getUnlockedSelections()) {
+		reinterpret_cast<StoredData *>(queueCtrl_->GetItemData(i))
+		    ->task->setMode(static_cast<standards::standard>(modeChoice_->GetSelection()));
+	}
+}
+
+const std::vector<wxDataViewItem> Frame::getUnlockedSelections() {
+	wxDataViewItemArray sel;
+	queueCtrl_->GetSelections(sel);
+	// remove selections that are locked
+	std::vector<wxDataViewItem> selVec;
+	for (auto i : sel)
+		selVec.emplace_back(i);
+
+	selVec.erase(std::remove_if(selVec.begin(), selVec.end(),
+	                            [&](const wxDataViewItem &i) {
+		                            Task *task = reinterpret_cast<StoredData *>(queueCtrl_->GetItemData(i))->task;
+		                            return task->completed_ || task->locked_;
+	                            }),
+	             selVec.end());
+
+	return selVec;
+}
+
+void Frame::onQueueChanged(wxDataViewEvent &evt) {
+	onQueueChanged();
+}
+
+void Frame::onQueueChanged() {
+	resizeColumns();
+	// enable or disable the start button depending on whether there are tasks
+	controlButton_->Enable(!running_ && !Task::isEmpty() || running_);
+}
+
+void Frame::onUpdateValue(wxCommandEvent &evt) {
+	std::unique_lock<std::mutex> lk(mut);
+
+	UpdateProgressData *data = reinterpret_cast<UpdateProgressData *>(evt.GetClientData());
+
+	queueCtrl_->SetValue(reinterpret_cast<UpdateProgressData *>(evt.GetClientData())->value,
+	                     reinterpret_cast<UpdateProgressData *>(evt.GetClientData())->row,
+	                     reinterpret_cast<UpdateProgressData *>(evt.GetClientData())->col);
+
+	// std::cout << "value " << data->value << " row " << data->row << " column " << data->col << std::endl;
+}
+
+void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
+	wxDataViewItem item = evt.GetItem();
+	if (!item.IsOk()) // discontinue computation if no item is clicked
+		return;
+
+	// store the selected items' task pointers
+	std::vector<Task *> tasks;
+	wxDataViewItemArray sel;
+	queueCtrl_->GetSelections(sel);
+	for (const auto &i : sel)
+		tasks.push_back(reinterpret_cast<StoredData *>(queueCtrl_->GetItemData(i))->task);
+
+	// count number of flags
+	int numErrors   = std::count_if(tasks.begin(), tasks.end(), [](Task *t) { return t->error_; });
+	int numUnlocked = std::count_if(tasks.begin(), tasks.end(), [](Task *t) { return !t->locked_; });
+	int numReady =
+	    std::count_if(tasks.begin(), tasks.end(), [](Task *t) { return !t->completed_ && !t->error_ && !t->locked_; });
+
+	// populate the menu
+	wxMenu menu;
+	if (numUnlocked > 0)
+		menu.Append(0, "Remove", nullptr);
+
+	if (numErrors > 0)
+		menu.Append(1, "Reset Status", nullptr); // only allow to reset status if the errors in the selection are more than 1
+
+	if (numReady > 0) {
+		wxMenu *standardMenu = new wxMenu;
+		int     id           = 10;
+		for (std::string i : standards::NAMES) {
+			standardMenu->Append(id++, i, nullptr);
+		}
+		menu.Append(2, "Change Standard", standardMenu);
+	}
+
+	// programme the menu
+	menu.Bind(wxEVT_COMMAND_MENU_SELECTED, [=](wxCommandEvent &evt) {
+		if (evt.GetId() == 0) { // remove
+			for (Task *const t : tasks)
+				Task::removeByTaskPtr(t);
+		} else if (evt.GetId() == 1) { // reset status
+			for (Task *const t : tasks) {
+				if (!t->locked_ && !t->completed_)
+					t->reset();
+			}
+		} else if (evt.GetId() >= 10 && evt.GetId() < 10 + standards::STANDARDS.size()) { // change standard
+			for (Task *const t : tasks) {
+				t->setMode(static_cast<standards::standard>(evt.GetId() - 10));
+			}
+		}
+	});
+
+	// show the menu
+	PopupMenu(&menu);
+
+	evt.Skip();
+}
+
+void Frame::onChangeSelection(wxDataViewEvent &evt) {
+	// set the value of the choice dropdown to the mode value of the first item in the selecion
+	wxDataViewItemArray sel;
+	queueCtrl_->GetSelections(sel);
+	if (sel.empty())
+		return;
+
+	modeChoice_->SetSelection(reinterpret_cast<StoredData *>(queueCtrl_->GetItemData(sel.front()))->task->mode_);
+}
+
+void Frame::onSetStatus(wxCommandEvent &evt) {
+	this->SetStatusText(evt.GetString());
+}
+
+void Frame::onHideStatus(wxCommandEvent &evt) {
+	if (GetStatusBar()->IsShown())
+		GetStatusBar()->Hide();
+}
+
+void Frame::onShowStatus(wxCommandEvent &evt) {
+	if (!GetStatusBar()->IsShown())
+		GetStatusBar()->Show();
 }
