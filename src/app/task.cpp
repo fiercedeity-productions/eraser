@@ -9,8 +9,8 @@
 #include <filesystem>
 #include <thread>
 
-Frame *            Task::frameInstance = 0;
-std::deque<Task *> Task::tasks         = {};
+Frame *            Task::frameInstance = nullptr;
+std::deque<Task *> Task::tasks;
 
 void Task::setFrame(Frame *const frameInstance) {
 	Task::frameInstance = frameInstance;
@@ -39,11 +39,17 @@ const std::deque<Task *> &Task::getTasks() {
 }
 
 Task::Task(const std::string &path, const standards::standard &mode)
-    : path_(std::experimental::filesystem::canonical(path).string())
-    , mode_(mode)
+    : mode_(mode)
     , locked_(false)
     , completed_(false)
     , error_(false) {
+
+	try {
+		path_ = std::experimental::filesystem::canonical(path).string();
+	} catch (std::experimental::filesystem::filesystem_error &e) {
+		errorMessage_ = e.what();
+	}
+
 	StoredData *storedData = new StoredData{this};
 
 	wxVector<wxVariant> data;

@@ -42,7 +42,14 @@ void FileTask::execute() {
 			    },
 			    [&](size_t, size_t) {
 				    // mark the file as deleted
-				    std::experimental::filesystem::remove(path_);
+				    try {
+					    std::experimental::filesystem::remove(path_);
+				    } catch (std::experimental::filesystem::filesystem_error &e) {
+					    updateStatus("Error");
+					    error_ = true;
+
+					    errorMessage_ = e.what();
+				    }
 
 				    std::thread(&FileTask::updateProgressBar, this, 1).detach();
 				    locked_    = false;
@@ -68,4 +75,9 @@ void FileTask::execute() {
 		}
 	})
 	    .detach();
+}
+
+const std::pair<std::string, std::vector<std::string>> FileTask::getError() const {
+	return error_ ? std::make_pair(path_, std::vector<std::string>{errorMessage_})
+	              : std::make_pair(path_, std::vector<std::string>{});
 }

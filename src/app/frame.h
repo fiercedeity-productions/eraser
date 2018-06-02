@@ -30,7 +30,6 @@ class Frame : public wxFrame {
 
 	double borderSize_ = 8;
 	bool   allowEdits_;
-	bool   paused_  = false;
 	bool   running_ = false;
 
 	void callNextTask(wxCommandEvent &evt);
@@ -59,6 +58,7 @@ class Frame : public wxFrame {
 	std::mutex mut;
 
   public:
+	bool                paused_ = false;
 	void                onQueueChanged(wxDataViewEvent &evt);
 	void                onQueueChanged();
 	wxDataViewListCtrl *queueCtrl_;

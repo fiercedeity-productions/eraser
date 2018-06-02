@@ -22,7 +22,7 @@ bool App::OnInit() {
 	// 	                               },
 	// 	                               [&](size_t fileSize, size_t) -> void {
 	// 		                               std::lock_guard<std::mutex> lock(mut);
-	// 		                               std::cout << "complete!" << std::endl;
+	// 		                               std::cout << "complete." << std::endl;
 	// 	                               });
 	// } catch (const std::runtime_error &e) {
 	// 	std::cout << e.what() << std::endl;

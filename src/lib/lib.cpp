@@ -19,14 +19,12 @@ void Eraser::validateSettings(const std::string &path, const size_t &chunkSize) 
 
 	std::ofstream file(path, std::ios::binary | std::ios::in);
 	if (chunkSize < 4096)
-		errorMessage = "Chunk size must be 4096 bytes or larger!";
+		errorMessage = "Chunk size must be 4096 bytes or larger";
 	else if (!std::experimental::filesystem::is_regular_file(path) && !std::experimental::filesystem::is_block_file(path) &&
 	         !std::experimental::filesystem::is_character_file(path))
-		errorMessage = "File does not exist!";
+		errorMessage = "File does not exist";
 	else if (!file.is_open())
-		errorMessage = "Error writing to file!";
-	else if (getSize(path) == 0)
-		errorMessage = "File must not be empty!";
+		errorMessage = "Error writing to file";
 	else {
 		return;
 	}
@@ -39,6 +37,10 @@ void Eraser::overwriteBytes(const std::string &path, const size_t &chunkSize, co
                             // arg1: bytes written, arg2: total bytes, arg3: pass number
                             const std::function<void(size_t, size_t, size_t)> &progressCheck, size_t pass) {
 	// empty pattern means random bits
+
+	// do not work on empty files
+	if (getSize(path) == 0)
+		return;
 
 	// open the file, without modifying it
 	std::ofstream file(path, std::ios::binary | std::ios::in);
@@ -81,7 +83,7 @@ void Eraser::overwriteBytesMultiple(const std::string &path, const size_t &chunk
 	validateSettings(path, chunkSize);
 	// make sure the patterns vector is not empty
 	if (patterns.empty())
-		throw std::runtime_error("Patterns must not be empty!");
+		throw std::runtime_error("Patterns must not be empty");
 
 	// loop through patterns and apply them
 	for (auto i = patterns.begin(); i < patterns.end(); ++i) {

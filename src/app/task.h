@@ -35,10 +35,11 @@ class Task {
 	static const bool                isEmpty(); // returns true if all tasks are completed/erroneous or tasks are emtpy
 	static const bool                callNext();
 
-	virtual const size_t getSize() const                           = 0;
-	virtual const bool   isIncluded(const std::string &path) const = 0; // to prevent duplicate values
-	virtual void         execute()                                 = 0;
+	virtual const size_t getSize() const                                            = 0;
+	virtual const bool   isIncluded(const std::string &path) const                  = 0; // to prevent duplicate values
+	virtual void         execute()                                                  = 0;
+	virtual const std::pair<std::string, std::vector<std::string>> getError() const = 0;
 
-	void setMode(const standards::standard &mode);
-	void reset();
+	void         setMode(const standards::standard &mode);
+	virtual void reset(); // is overridden by DirTask
 };

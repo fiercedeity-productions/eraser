@@ -1,5 +1,6 @@
 #pragma once
 #include "frame.h"
+#include "errordialog.h"
 #include "generator.h"
 #include "standards.h"
 #include "storeddata.h"
@@ -52,7 +53,7 @@ Frame::Frame()
 	scalingFactor_ = hDpi / 96;
 
 	// configure gui
-	panel_         = new wxPanel(this, wxID_ANY);
+	panel_         = new wxPanel(this);
 	sizer_         = new wxBoxSizer(wxVERTICAL);
 	addSizer_      = new wxBoxSizer(wxHORIZONTAL);
 	controlsSizer_ = new wxBoxSizer(wxHORIZONTAL);
@@ -106,8 +107,10 @@ Frame::Frame()
 	queueCtrlCol5_->SetResizeable(false);
 
 	CreateStatusBar();
-	panel_->SetSizerAndFit(sizer_);
-	SetSize(800 * scalingFactor_, 600 * scalingFactor_);
+	panel_->SetSizer(sizer_);
+	SetClientSize(800.0 * scalingFactor_, 600.0 * scalingFactor_);
+
+	wxPostEvent(this, wxCommandEvent(HIDE_STATUS));
 	Show();
 	resizeColumns();
 	Task::setFrame(this);
@@ -180,9 +183,10 @@ void Frame::addFileDialog(wxCommandEvent &evt) {
 
 	if (removedPaths > 0)
 		wxMessageBox(removedPaths == 1
-		                 ? "\"" + removedPath + "\" does not exist or is unable to be accessed. It will not be added."
-		                 : std::to_string(removedPaths) +
-		                       " of these files do not exist or are unable to be accessed. They will not be added.",
+		                 ? "\"" + removedPath +
+		                       "\" does not exist, is unable to be accessed or is already in the queue. It will not be added."
+		                 : std::to_string(removedPaths) + " of these files do not exist, are unable to be accessed or are "
+		                                                  "already in the queue. They will not be added.",
 		             "Invalid Files", 5L, this);
 
 	if (paths.empty())
@@ -212,7 +216,8 @@ void Frame::addDirDialog(wxCommandEvent &evt) {
 	struct stat perms;
 	int         res = stat(path.c_str(), &perms);
 	if (~perms.st_mode & (S_IWRITE | S_IREAD) || res == -1 || Task::inQueue(path)) {
-		wxMessageBox("Insufficient permissions for \"" + path + "\". It will not be added.", "Folder Permissions", 5L, this);
+		wxMessageBox("\"" + path + "\" is already in the queue or is unable to be accessed. It will not be added.",
+		             "Folder Permissions", 5L, this);
 		return;
 	}
 
@@ -415,9 +420,10 @@ void Frame::onEnter(wxCommandEvent &evt) {
 
 	if (removedPaths > 0)
 		wxMessageBox(removedPaths == 1
-		                 ? "\"" + removedPath + "\" does not exist or is unable to be accessed. It will not be added."
-		                 : std::to_string(removedPaths) +
-		                       " of these paths do not exist or are unable to accessed. They will not be added.",
+		                 ? "\"" + removedPath +
+		                       "\" is already in the queue, does not exist or is unable to be accessed. It will not be added."
+		                 : std::to_string(removedPaths) + " of these paths are alrady in the queue, do not exist or are unable "
+		                                                  "to accessed. They will not be added.",
 		             "Invalid Paths", 5L, this);
 
 	// join the splitPaths vector and set that value to the pathCtrl_
@@ -534,6 +540,16 @@ void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
 	for (const auto &i : sel)
 		tasks.push_back(reinterpret_cast<StoredData *>(queueCtrl_->GetItemData(i))->task);
 
+	// compile error tasks into a string
+	std::vector<std::pair<std::string, std::vector<std::string>>> errorMessages;
+	std::transform(tasks.begin(), tasks.end(), std::back_inserter(errorMessages), [](Task *t) {
+		return t->error_ && !t->locked_ ? t->getError() : std::make_pair(t->path_, std::vector<std::string>{""});
+	});
+	errorMessages.erase(
+	    std::remove_if(errorMessages.begin(), errorMessages.end(),
+	                   [](const std::pair<std::string, std::vector<std::string>> &e) { return e.second.empty(); }),
+	    errorMessages.end());
+
 	// count number of flags
 	int numErrors   = std::count_if(tasks.begin(), tasks.end(), [](Task *t) { return t->error_; });
 	int numUnlocked = std::count_if(tasks.begin(), tasks.end(), [](Task *t) { return !t->locked_; });
@@ -545,8 +561,11 @@ void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
 	if (numUnlocked > 0)
 		menu.Append(0, "Remove", nullptr);
 
-	if (numErrors > 0)
-		menu.Append(1, "Reset Status", nullptr); // only allow to reset status if the errors in the selection are more than 1
+	if (numErrors > 0) {
+		// only allow to reset status or view errors if the errors in the selection are more than 1
+		menu.Append(1, "Reset Status", nullptr);
+		menu.Append(2, "View Errors in Selection", nullptr);
+	}
 
 	if (numReady > 0) {
 		wxMenu *standardMenu = new wxMenu;
@@ -554,7 +573,7 @@ void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
 		for (std::string i : standards::NAMES) {
 			standardMenu->Append(id++, i, nullptr);
 		}
-		menu.Append(2, "Change Standard", standardMenu);
+		menu.Append(3, "Change Standard", standardMenu);
 	}
 
 	// programme the menu
@@ -564,9 +583,11 @@ void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
 				Task::removeByTaskPtr(t);
 		} else if (evt.GetId() == 1) { // reset status
 			for (Task *const t : tasks) {
-				if (!t->locked_ && !t->completed_)
+				if (!t->locked_)
 					t->reset();
 			}
+		} else if (evt.GetId() == 2) {
+			new ErrorDialog(dynamic_cast<wxFrame *>(this), borderSize_, scalingFactor_, errorMessages);
 		} else if (evt.GetId() >= 10 && evt.GetId() < 10 + standards::STANDARDS.size()) { // change standard
 			for (Task *const t : tasks) {
 				t->setMode(static_cast<standards::standard>(evt.GetId() - 10));
@@ -595,11 +616,15 @@ void Frame::onSetStatus(wxCommandEvent &evt) {
 }
 
 void Frame::onHideStatus(wxCommandEvent &evt) {
-	if (GetStatusBar()->IsShown())
+	if (GetStatusBar()->IsShown()) {
 		GetStatusBar()->Hide();
+		SendSizeEvent();
+	}
 }
 
 void Frame::onShowStatus(wxCommandEvent &evt) {
-	if (!GetStatusBar()->IsShown())
+	if (!GetStatusBar()->IsShown()) {
 		GetStatusBar()->Show();
+		SendSizeEvent();
+	}
 }

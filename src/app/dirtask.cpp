@@ -5,6 +5,7 @@
 #include "updateprogressdata.h"
 #include <filesystem>
 #include <iomanip>
+#include <numeric>
 #include <sstream>
 #include <thread>
 
@@ -28,7 +29,8 @@ DirTask::DirTask(const std::string &path, const standards::standard &mode)
 const bool DirTask::isIncluded(const std::string &path) const {
 	// get absolute path
 	std::string pathAbs = std::experimental::filesystem::canonical(path).string();
-	return std::experimental::filesystem::equivalent(pathAbs.substr(0, path_.length()), path_) && !completed_;
+	return pathAbs.length() >= path_.length() &&
+	       std::experimental::filesystem::equivalent(pathAbs.substr(0, path_.length()), path_) && !completed_;
 }
 
 // const size_t DirTask::getSize() const {
@@ -71,10 +73,39 @@ void DirTask::execute() {
 	// wxQueueEvent(frameInstance, new wxCommandEvent(CALL_NEXT_TASK));
 
 	std::thread([&]() {
+		if (!std::experimental::filesystem::is_directory(path_)) {
+			updateStatus("Error");
+			locked_    = false;
+			completed_ = false;
+			error_     = true;
+
+			// call the next task
+			errorMessage_ = "Directory does not exist";
+			errorMessages_.push_back(errorMessage_);
+			wxQueueEvent(frameInstance, new wxCommandEvent(CALL_NEXT_TASK));
+			return;
+		}
+
 		wxQueueEvent(frameInstance, new wxCommandEvent(SHOW_STATUS));
 		locked_ = true;
 		for (auto &file : std::experimental::filesystem::recursive_directory_iterator(path_)) {
+			if (std::experimental::filesystem::is_directory(file.path()))
+				continue; // do not process folders
+
+			if (frameInstance->paused_) {
+				updateStatus("Stopped");
+				locked_    = false;
+				completed_ = false;
+				error_     = true;
+
+				// call the next task
+				errorMessage_ = "Stopped by User";
+				errorMessages_.push_back(errorMessage_);
+				wxQueueEvent(frameInstance, new wxCommandEvent(CALL_NEXT_TASK));
+				return;
+			}
 			try {
+				std::thread(&DirTask::updateStatusBar, this, file.path().string() + "(...)").detach();
 				std::thread(&DirTask::updateStatus, this, "Writing...").detach(); // set to 0% as is calling next file
 				Eraser::overwriteBytesMultiple(
 				    file.path().string(), 4096 * 1024, standards::STANDARDS[mode_],
@@ -85,43 +116,57 @@ void DirTask::execute() {
 					    summary << std::setprecision(3) << 100.0 * proportion;
 
 					    std::thread(&DirTask::updateStatus, this, std::string("Writing: ") + summary.str() + "%").detach();
+					    std::thread(&DirTask::updateStatusBar, this, file.path().string() + "(" + summary.str() + " %)")
+					        .detach();
 					    std::thread(&DirTask::updateProgressBar, this, proportion).detach();
-					    std::thread(&DirTask::updateStatusBar, this, file.path().string()).detach();
 				    },
 				    [&](size_t, size_t) {
 					    // mark the file as deleted
 					    try {
 						    std::experimental::filesystem::remove(file.path().string());
 					    } catch (std::experimental::filesystem::filesystem_error &e) {
-						    updateStatus("Errors");
+						    updateStatus("Error");
 						    error_ = true;
 
-						    errorMessage_ = e.what();
+						    errorMessage_ = file.path().string() + ": " + e.what();
+						    errorMessages_.push_back(errorMessage_);
 					    }
 
 					    std::thread(&DirTask::updateProgressBar, this, 0).detach(); // set to 0% as is calling next file
 				    });
 				wxPuts("end");
 			} catch (std::runtime_error &e) {
-				updateStatus("Errors");
-				locked_    = false;
-				completed_ = false;
-				error_     = true;
+				updateStatus("Error");
+				error_ = true;
 				// TODO: support resetting the status
 
 				// call the next task
-				errorMessage_ = e.what();
+				errorMessage_ = file.path().string() + ": " + e.what();
+				errorMessages_.push_back(errorMessage_);
 				wxQueueEvent(frameInstance, new wxCommandEvent(CALL_NEXT_TASK));
-				return;
+				wxQueueEvent(frameInstance, new wxCommandEvent(HIDE_STATUS));
 			}
 		}
 
 		std::thread(&DirTask::updateProgressBar, this, 1).detach(); // set to 0% as is calling next file
-		updateStatus("Completed");
+		locked_ = false;
 
-		locked_    = false;
-		error_     = false;
-		completed_ = true;
+		if (!error_) {
+			updateStatus("Completed");
+			error_     = false;
+			completed_ = true;
+
+			try {
+				// mark the folder as deleted
+				std::experimental::filesystem::remove_all(path_);
+			} catch (std::experimental::filesystem::filesystem_error &e) {
+				updateStatus("Error");
+				error_ = true;
+
+				errorMessage_ = e.what();
+				errorMessages_.push_back(errorMessage_);
+			}
+		}
 
 		// call the next task
 		wxQueueEvent(frameInstance, new wxCommandEvent(HIDE_STATUS));
@@ -165,3 +210,14 @@ void DirTask::execute() {
 
 // 	locked_ = false;
 // }
+
+const std::pair<std::string, std::vector<std::string>> DirTask::getError() const {
+	if (errorMessages_.empty())
+		return std::make_pair(path_, std::vector<std::string>{});
+	return std::make_pair(path_, errorMessages_);
+}
+
+void DirTask::reset() {
+	Task::reset();
+	errorMessages_.clear();
+}
