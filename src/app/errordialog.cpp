@@ -72,13 +72,13 @@ void ErrorDialog::onActivate() {
 }
 
 void ErrorDialog::onContext(wxListEvent &evt) {
-	wxMenu menu;
-	menu.Append(0, "Copy");
-	menu.Bind(wxEVT_COMMAND_MENU_SELECTED, [&](wxCommandEvent &evt) {
+	wxMenu *menu = new wxMenu;
+	menu->Append(0, "Copy");
+	menu->Bind(wxEVT_COMMAND_MENU_SELECTED, [&](wxCommandEvent &evt) {
 		if (evt.GetId() == 0) {
 			onActivate();
 		}
 	});
 
-	PopupMenu(&menu);
+	PopupMenu(menu);
 }

@@ -52,6 +52,7 @@ class Frame : public wxFrame {
 	void onControlButton(wxCommandEvent &evt);
 	void onChangeText(wxCommandEvent &evt);
 	void onChangeSelection(wxDataViewEvent &evt);
+	void onChangeSelection();
 
 	void onUpdateValue(wxCommandEvent &evt);
 	void onSetStatus(wxCommandEvent &evt);

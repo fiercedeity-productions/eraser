@@ -47,11 +47,13 @@ EVT_DATAVIEW_SELECTION_CHANGED(wxID_PROPERTIES, Frame::onChangeSelection)
 EVT_DATAVIEW_ITEM_ACTIVATED(wxID_PROPERTIES, Frame::onActivate)
 END_EVENT_TABLE()
 
+#if !defined(unix) && !defined(__unix__) && !defined(__unix)
 struct insensitiveComp {
 	bool operator()(const std::string &a, const std::string &b) {
 		return stricmp(a.c_str(), b.c_str()) < 0;
 	}
 };
+#endif
 
 Frame::Frame()
     : wxFrame(nullptr, wxID_HOME, "GoodBye") {
@@ -63,8 +65,8 @@ Frame::Frame()
 
 	scalingFactor_ = hDpi / 96;
 #else
-	scalingFactor       = 1.0
-#endif;
+	scalingFactor_      = 1.0;
+#endif
 
 	// configure gui
 	panel_         = new wxPanel(this);
@@ -419,8 +421,11 @@ void Frame::onEnter(wxCommandEvent &evt) {
 	    std::regex_replace(evt.GetString().ToStdString(), std::regex(";(?!\\s)"), "; "); // replace ";" with "; "
 	size_t elementBegin = 0;
 	size_t cursor       = 0;
-
+#if !defined(unix) && !defined(__unix__) && !defined(__unix)
 	std::set<std::string, insensitiveComp> splitPaths;
+#else
+	std::set<std::string> splitPaths;
+#endif
 
 	// split the text by "; "
 	while (cursor < value.length()) {
@@ -511,6 +516,12 @@ void Frame::addToQueue(std::string path) {
 }
 
 void Frame::resizeColumns() {
+	queueCtrlCol1_->SetWidth(wxCOL_WIDTH_AUTOSIZE);
+	queueCtrlCol2_->SetWidth(wxCOL_WIDTH_AUTOSIZE);
+	queueCtrlCol3_->SetWidth(wxCOL_WIDTH_AUTOSIZE);
+	queueCtrlCol4_->SetWidth(wxCOL_WIDTH_AUTOSIZE);
+	queueCtrlCol5_->SetWidth(wxCOL_WIDTH_AUTOSIZE);
+
 	queueCtrlCol1_->SetWidth(queueCtrl_->GetSize().GetX() - queueCtrlCol2_->GetWidth() - queueCtrlCol3_->GetWidth() -
 	                         queueCtrlCol4_->GetWidth() - (scalingFactor_ * 128));
 	queueCtrlCol5_->SetWidth(scalingFactor_ * 128);
@@ -591,6 +602,8 @@ void Frame::onQueueChanged() {
 	        : static_cast<int>(100.0 * static_cast<double>(std::count_if(Task::getTasks().begin(), Task::getTasks().end(),
 	                                                                     [](Task *const t) { return t->completed_; }) /
 	                                                       static_cast<double>(Task::getTasks().size()))));
+
+	onChangeSelection();
 }
 
 void Frame::onUpdateValue(wxCommandEvent &evt) {
@@ -636,14 +649,14 @@ void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
 	    std::count_if(tasks.begin(), tasks.end(), [](Task *t) { return !t->completed_ && !t->error_ && !t->locked_; });
 
 	// populate the menu
-	wxMenu menu;
+	wxMenu *menu = new wxMenu;
 	if (numUnlocked > 0)
-		menu.Append(0, "Remove", nullptr);
+		menu->Append(0, "Remove", nullptr);
 
 	if (numErrors > 0) {
 		// only allow to reset status or view errors if the errors in the selection are more than 1
-		menu.Append(1, "Reset Status", nullptr);
-		menu.Append(2, "Show Error Details", nullptr);
+		menu->Append(1, "Reset Status", nullptr);
+		menu->Append(2, "Show Error Details", nullptr);
 	}
 
 	if (numReady > 0) {
@@ -652,11 +665,11 @@ void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
 		for (std::string i : standards::NAMES) {
 			standardMenu->Append(id++, i, nullptr);
 		}
-		menu.Append(3, "Change Standard", standardMenu);
+		menu->Append(3, "Change Standard", standardMenu);
 	}
 
 	// programme the menu
-	menu.Bind(wxEVT_COMMAND_MENU_SELECTED, [=](wxCommandEvent &evt) {
+	menu->Bind(wxEVT_COMMAND_MENU_SELECTED, [=](wxCommandEvent &evt) {
 		if (evt.GetId() == 0) { // remove
 			for (Task *const t : tasks)
 				Task::removeByTaskPtr(t);
@@ -677,12 +690,17 @@ void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
 	});
 
 	// show the menu
-	PopupMenu(&menu);
+	PopupMenu(menu);
 
 	evt.Skip();
 }
 
 void Frame::onChangeSelection(wxDataViewEvent &evt) {
+	onChangeSelection();
+	evt.Skip();
+}
+
+void Frame::onChangeSelection() {
 	// set the value of the choice dropdown to the mode value of the first item in the selecion
 	wxDataViewItemArray sel;
 	std::vector<Task *> tasks;
@@ -710,7 +728,6 @@ void Frame::onChangeSelection(wxDataViewEvent &evt) {
 
 	if (i != tasks.end())
 		modeChoice_->SetSelection(mode);
-	evt.Skip();
 }
 
 void Frame::onSetStatus(wxCommandEvent &evt) {

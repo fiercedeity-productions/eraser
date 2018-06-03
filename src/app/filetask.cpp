@@ -31,7 +31,6 @@ void FileTask::execute() {
 		try {
 			updateSize();
 			locked_ = true;
-			wxPuts("begin");
 			GoodBye::overwriteBytesMultiple(
 			    path_, 4096 * 1024, standards::STANDARDS[mode_],
 			    [&](size_t a, size_t b, size_t c) {
@@ -65,7 +64,6 @@ void FileTask::execute() {
 				    wxQueueEvent(frameInstance, new wxCommandEvent(CALL_NEXT_TASK));
 				    return;
 			    });
-			wxPuts("end");
 		} catch (std::runtime_error &e) {
 			updateStatus("Error");
 			locked_    = false;

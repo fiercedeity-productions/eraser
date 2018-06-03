@@ -140,7 +140,6 @@ void DirTask::execute() {
 
 					    std::thread(&DirTask::updateProgressBar, this, 0).detach(); // set to 0% as is calling next file
 				    });
-				wxPuts("end");
 			} catch (std::runtime_error &e) {
 				updateStatus("Error");
 				updateProgressBar(0);
