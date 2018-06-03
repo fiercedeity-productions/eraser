@@ -18,7 +18,14 @@ FileTask::FileTask(const std::string &path, const standards::standard &mode)
 }
 
 const bool FileTask::isIncluded(const std::string &path) const {
-	return std::experimental::filesystem::equivalent(path, path_) && !completed_;
+	if (completed_)
+		return false;
+	try {
+		const bool returnValue = std::experimental::filesystem::equivalent(path, path_) && !completed_;
+		return returnValue;
+	} catch (std::experimental::filesystem::filesystem_error &err) {
+		return false;
+	}
 }
 
 const size_t FileTask::getSize() const {

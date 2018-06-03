@@ -31,10 +31,20 @@ DirTask::DirTask(const std::string &path, const standards::standard &mode)
 }
 
 const bool DirTask::isIncluded(const std::string &path) const {
+	// if completed, return false
+	if (completed_)
+		return false;
+
 	// get absolute path
-	std::string pathAbs = std::experimental::filesystem::canonical(path).string();
-	return pathAbs.length() >= path_.length() &&
-	       std::experimental::filesystem::equivalent(pathAbs.substr(0, path_.length()), path_) && !completed_;
+	try {
+		std::string pathAbs     = std::experimental::filesystem::canonical(path).string();
+		const bool  returnValue = pathAbs.length() >= path_.length() &&
+		                         std::experimental::filesystem::equivalent(pathAbs.substr(0, path_.length()), path_) &&
+		                         !completed_;
+		return returnValue;
+	} catch (std::experimental::filesystem::filesystem_error &err) {
+		return false;
+	}
 }
 
 // const size_t DirTask::getSize() const {
