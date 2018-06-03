@@ -1,7 +1,11 @@
 #pragma once
 #include "filetask.h"
 #include "lib.h"
+#ifdef _MSC_VER
 #include <filesystem>
+#else
+#include <experimental/filesystem>
+#endif
 #include <iomanip>
 #include <sstream>
 #include <thread>
@@ -18,7 +22,7 @@ const bool FileTask::isIncluded(const std::string &path) const {
 }
 
 const size_t FileTask::getSize() const {
-	return Eraser::getSize(path_);
+	return GoodBye::getSize(path_);
 };
 
 void FileTask::execute() {
@@ -28,7 +32,7 @@ void FileTask::execute() {
 			updateSize();
 			locked_ = true;
 			wxPuts("begin");
-			Eraser::overwriteBytesMultiple(
+			GoodBye::overwriteBytesMultiple(
 			    path_, 4096 * 1024, standards::STANDARDS[mode_],
 			    [&](size_t a, size_t b, size_t c) {
 				    double proportion =

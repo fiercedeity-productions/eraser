@@ -6,11 +6,15 @@
 #include "lib.h"
 #include "storeddata.h"
 #include "updateprogressdata.h"
+#ifdef _MSC_VER
 #include <filesystem>
+#else
+#include <experimental/filesystem>
+#endif
 #include <thread>
 
-Frame *            Task::frameInstance = nullptr;
-std::deque<Task *> Task::tasks;
+Frame *             Task::frameInstance = nullptr;
+std::vector<Task *> Task::tasks;
 
 void Task::setFrame(Frame *const frameInstance) {
 	Task::frameInstance = frameInstance;
@@ -34,7 +38,7 @@ const wxDataViewItem &Task::add(const std::string &path, const standards::standa
 	return task->queueRow_;
 }
 
-const std::deque<Task *> &Task::getTasks() {
+const std::vector<Task *> &Task::getTasks() {
 	return tasks;
 }
 

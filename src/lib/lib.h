@@ -9,7 +9,7 @@
 #define EXPORT __declspec(dllexport)
 #endif
 
-class EXPORT Eraser {
+class EXPORT GoodBye {
   private:
   public:
 	// validate settings. will throw errors

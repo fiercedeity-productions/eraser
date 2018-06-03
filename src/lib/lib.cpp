@@ -1,12 +1,16 @@
 #pragma once
 #include "lib.h"
 
+#ifdef _MSC_VER
 #include <filesystem>
+#else
+#include <experimental/filesystem>
+#endif
 #include <fstream>
 #include <thread>
 
 // get size of a file at a path
-size_t Eraser::getSize(const std::string &path) {
+size_t GoodBye::getSize(const std::string &path) {
 	// open the file
 	std::ifstream file(path, std::ios::binary | std::ios::ate);
 	// return the position of the cursor, and therefore the size of the file in bytes
@@ -14,7 +18,7 @@ size_t Eraser::getSize(const std::string &path) {
 }
 
 // validate settings
-void Eraser::validateSettings(const std::string &path, const size_t &chunkSize) {
+void GoodBye::validateSettings(const std::string &path, const size_t &chunkSize) {
 	std::string errorMessage;
 
 	std::ofstream file(path, std::ios::binary | std::ios::in);
@@ -33,9 +37,9 @@ void Eraser::validateSettings(const std::string &path, const size_t &chunkSize) 
 }
 
 // overwrite files
-void Eraser::overwriteBytes(const std::string &path, const size_t &chunkSize, const std::vector<unsigned char> &pattern,
-                            // arg1: bytes written, arg2: total bytes, arg3: pass number
-                            const std::function<void(size_t, size_t, size_t)> &progressCheck, size_t pass) {
+void GoodBye::overwriteBytes(const std::string &path, const size_t &chunkSize, const std::vector<unsigned char> &pattern,
+                             // arg1: bytes written, arg2: total bytes, arg3: pass number
+                             const std::function<void(size_t, size_t, size_t)> &progressCheck, size_t pass) {
 	// empty pattern means random bits
 
 	// do not work on empty files
@@ -73,12 +77,12 @@ void Eraser::overwriteBytes(const std::string &path, const size_t &chunkSize, co
 }
 
 // multiple times
-void Eraser::overwriteBytesMultiple(const std::string &path, const size_t &chunkSize,
-                                    const std::vector<std::vector<unsigned char>> &patterns,
-                                    // arg1: bytes written, arg2: total bytes, arg3: pass number
-                                    const std::function<void(size_t, size_t, size_t)> &progressCheck,
-                                    // arg1: arg2: total bytes in file, arg2: pass number
-                                    const std::function<void(size_t, size_t)> &callback) {
+void GoodBye::overwriteBytesMultiple(const std::string &path, const size_t &chunkSize,
+                                     const std::vector<std::vector<unsigned char>> &patterns,
+                                     // arg1: bytes written, arg2: total bytes, arg3: pass number
+                                     const std::function<void(size_t, size_t, size_t)> &progressCheck,
+                                     // arg1: arg2: total bytes in file, arg2: pass number
+                                     const std::function<void(size_t, size_t)> &callback) {
 	// do some validation
 	validateSettings(path, chunkSize);
 	// make sure the patterns vector is not empty
@@ -96,8 +100,8 @@ void Eraser::overwriteBytesMultiple(const std::string &path, const size_t &chunk
 }
 
 // create buffers to overwrite the files
-unsigned char *Eraser::createBuffer(const std::vector<unsigned char> &pattern, const size_t &bufferSize,
-                                    const size_t &patternOverhang) {
+unsigned char *GoodBye::createBuffer(const std::vector<unsigned char> &pattern, const size_t &bufferSize,
+                                     const size_t &patternOverhang) {
 	// create an array on the heap with the size of chunkSize
 	unsigned char *buffer = new unsigned char[bufferSize];
 	// fill the buffer up
@@ -111,7 +115,7 @@ unsigned char *Eraser::createBuffer(const std::vector<unsigned char> &pattern, c
 	return buffer;
 }
 
-unsigned char *Eraser::createBuffer(const size_t &bufferSize) {
+unsigned char *GoodBye::createBuffer(const size_t &bufferSize) {
 	// seed rand() to time
 	srand(static_cast<unsigned int>(time(nullptr)));
 	// create an array on the heap with the size of chunkSize

@@ -6,11 +6,16 @@
 #include "storeddata.h"
 #include "task.h"
 #include "updateprogressdata.h"
+#ifdef _MSC_VER
 #include <filesystem>
+#else
+#include <experimental/filesystem>
+#endif
 #include <numeric>
 #include <regex>
 #include <set>
 #include <sys/stat.h>
+#include <wx/richmsgdlg.h>
 #include <wx/statline.h>
 
 wxDEFINE_EVENT(CALL_NEXT_TASK, wxCommandEvent);
@@ -31,10 +36,14 @@ EVT_BUTTON(wxID_FILE2, Frame::addFileDialog)
 EVT_BUTTON(wxID_FILE3, Frame::addDirDialog)
 EVT_CHOICE(wxID_PREFERENCES, Frame::onEdit)
 EVT_BUTTON(wxID_EXECUTE, Frame::onControlButton)
+EVT_BUTTON(wxID_REMOVE, Frame::removeSelected)
+EVT_BUTTON(wxID_VIEW_DETAILS, Frame::viewDetails)
+EVT_BUTTON(wxID_INFO, Frame::displayInformation)
 EVT_SIZE(Frame::onSize)
 EVT_DATAVIEW_ITEM_VALUE_CHANGED(wxID_PROPERTIES, Frame::onQueueChanged)
 EVT_DATAVIEW_ITEM_CONTEXT_MENU(wxID_PROPERTIES, Frame::onQueueContextMenu)
 EVT_DATAVIEW_SELECTION_CHANGED(wxID_PROPERTIES, Frame::onChangeSelection)
+EVT_DATAVIEW_ITEM_ACTIVATED(wxID_PROPERTIES, Frame::onActivate)
 END_EVENT_TABLE()
 
 struct insensitiveComp {
@@ -44,19 +53,24 @@ struct insensitiveComp {
 };
 
 Frame::Frame()
-    : wxFrame(nullptr, wxID_HOME, "Eraser") {
+    : wxFrame(nullptr, wxID_HOME, "GoodBye") {
 	// get scaling factor
+#ifdef _WIN32
 	HDC    screen = GetDC(NULL);
 	double hDpi   = GetDeviceCaps(screen, LOGPIXELSX);
 	ReleaseDC(NULL, screen);
 
 	scalingFactor_ = hDpi / 96;
+#else
+	scalingFactor       = 1.0
+#endif;
 
 	// configure gui
 	panel_         = new wxPanel(this);
 	sizer_         = new wxBoxSizer(wxVERTICAL);
 	addSizer_      = new wxBoxSizer(wxHORIZONTAL);
 	controlsSizer_ = new wxBoxSizer(wxHORIZONTAL);
+	indicator_     = new wxAppProgressIndicator(this, 100);
 
 	queueCtrl_ = new wxDataViewListCtrl(panel_, wxID_PROPERTIES, wxDefaultPosition, wxDefaultSize,
 	                                    wxDV_MULTIPLE | wxDV_HORIZ_RULES | wxDV_VERT_RULES);
@@ -69,6 +83,13 @@ Frame::Frame()
 	controlButton_ = new wxButton(panel_, wxID_EXECUTE, "Start", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
 	controlButton_->Disable(); // disabled initially as queue is initially empty
 
+	informationButton_ = new wxButton(panel_, wxID_INFO, "?", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+	removeButton_      = new wxButton(panel_, wxID_REMOVE, "Remove", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+	viewButton_        = new wxButton(panel_, wxID_VIEW_DETAILS, "Details", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+
+	viewButton_->Disable();
+	removeButton_->Disable();
+
 	// change standards::NAMES vector into a wxVector
 	wxArrayString choices;
 	for (std::string i : standards::NAMES)
@@ -78,10 +99,13 @@ Frame::Frame()
 
 	addSizer_->Add(pathCtrl_, wxSizerFlags(1).Expand().Border(wxRIGHT, borderSize_ * scalingFactor_));
 	addSizer_->Add(addFiles_, wxSizerFlags(0).Expand().Border(wxRIGHT, borderSize_ * scalingFactor_));
-	addSizer_->Add(addFolder_, wxSizerFlags(0).Expand());
+	addSizer_->Add(addFolder_, wxSizerFlags(0));
 
 	controlsSizer_->Add(controlButton_, wxSizerFlags(1).Proportion(1).Expand().Border(wxRIGHT, borderSize_ * scalingFactor_));
-	controlsSizer_->Add(modeChoice_, wxSizerFlags(1).Proportion(4).Expand());
+	controlsSizer_->Add(modeChoice_, wxSizerFlags(1).Proportion(4).Expand().Border(wxRIGHT, borderSize_ * scalingFactor_));
+	controlsSizer_->Add(informationButton_, wxSizerFlags(0).Expand().Border(wxRIGHT, borderSize_ * scalingFactor_));
+	controlsSizer_->Add(removeButton_, wxSizerFlags(0).Expand().Border(wxRIGHT, borderSize_ * scalingFactor_));
+	controlsSizer_->Add(viewButton_, wxSizerFlags(0).Expand());
 
 	sizer_->Add(Generator::createLabel(panel_, borderSize_, scalingFactor_, "Add Files and Folders"), wxSizerFlags(0).Expand());
 	sizer_->Add(addSizer_, wxSizerFlags(0).Expand().Border(wxALL & ~wxUP & ~wxDOWN, borderSize_ * scalingFactor_));
@@ -123,6 +147,26 @@ Frame::~Frame() {
 
 void Frame::onControlButton(wxCommandEvent &evt) {
 	if (!running_) {
+		// calling a next task from the button
+		if (warn_) {
+			wxRichMessageDialog warning(this,
+			                            "All data in the added files and folders will be deleted and unrecoverable! "
+			                            "Please confirm your wishes or check your data one last time.",
+			                            "Are you sure?", wxOK | wxCANCEL | wxCANCEL_DEFAULT | wxICON_WARNING);
+			warning.ShowDetailedText(
+			    "Although government standards are implemented, it can never be certain that a group with infinite power like "
+			    "MI5 cannot still recover your information using forensic analysis. This is especially true with modern SSDs, "
+			    "which spread written data across the disk. SSDs require a full disk re-write, which can damage the disk, in "
+			    "order to fully purge its information. You may add more files and folders during the overwriting process, "
+			    "which will be automatically deleted once it reaches their turn. Right click on any items to view more "
+			    "options.");
+			warning.ShowCheckBox("Do not warn again in this session", false);
+			if (warning.ShowModal() != wxID_OK) // discontinue computation if user cancels
+				return;
+
+			if (warning.IsCheckBoxChecked())
+				warn_ = false;
+		}
 		callNextTask(evt);
 	} else if (running_ && !paused_) {
 		paused_ = true;
@@ -131,6 +175,8 @@ void Frame::onControlButton(wxCommandEvent &evt) {
 		paused_ = false;
 		controlButton_->SetLabelText("Stop");
 	}
+
+	evt.Skip();
 }
 
 void Frame::callNextTask(wxCommandEvent &evt) {
@@ -138,8 +184,12 @@ void Frame::callNextTask(wxCommandEvent &evt) {
 		running_ = Task::callNext();
 		if (running_)
 			controlButton_->SetLabelText("Stop");
-		else
+		else { // this means that all the tasks in the queue have been completed
+			Raise();
+			Restore();
+			Show();
 			controlButton_->SetLabelText("Start");
+		}
 	} else {
 		controlButton_->SetLabelText("Start");
 		paused_  = false;
@@ -203,6 +253,8 @@ void Frame::addFileDialog(wxCommandEvent &evt) {
 	// add to the queue
 	for (std::string str : paths)
 		addToQueue(str);
+
+	evt.Skip();
 }
 
 void Frame::addDirDialog(wxCommandEvent &evt) {
@@ -514,6 +566,27 @@ void Frame::onQueueChanged() {
 	resizeColumns();
 	// enable or disable the start button depending on whether there are tasks
 	controlButton_->Enable(!running_ && !Task::isEmpty() || running_);
+	// if there are errors, enable the view button
+	viewButton_->Enable(
+	    std::count_if(Task::getTasks().begin(), Task::getTasks().end(), [](Task *t) { return t->error_ && !t->locked_; }) > 0);
+
+	// store the selected items' task pointers
+	std::vector<Task *> tasks;
+	wxDataViewItemArray sel;
+	queueCtrl_->GetSelections(sel);
+	// enable the remove button if at least one selected task is unlocked
+	for (const auto &i : sel)
+		tasks.push_back(reinterpret_cast<StoredData *>(queueCtrl_->GetItemData(i))->task);
+
+	removeButton_->Enable(std::count_if(tasks.begin(), tasks.end(), [](Task *t) { return !t->locked_; }) > 0);
+
+	// set the app progress indicator based on total number of completed/not completed tasks
+	indicator_->SetValue(
+	    Task::getTasks().empty()
+	        ? 0 // if empty, set progress to 0
+	        : static_cast<int>(100.0 * static_cast<double>(std::count_if(Task::getTasks().begin(), Task::getTasks().end(),
+	                                                                     [](Task *const t) { return t->completed_; }) /
+	                                                       static_cast<double>(Task::getTasks().size()))));
 }
 
 void Frame::onUpdateValue(wxCommandEvent &evt) {
@@ -526,6 +599,7 @@ void Frame::onUpdateValue(wxCommandEvent &evt) {
 	                     reinterpret_cast<UpdateProgressData *>(evt.GetClientData())->col);
 
 	// std::cout << "value " << data->value << " row " << data->row << " column " << data->col << std::endl;
+	evt.Skip();
 }
 
 void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
@@ -537,13 +611,14 @@ void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
 	std::vector<Task *> tasks;
 	wxDataViewItemArray sel;
 	queueCtrl_->GetSelections(sel);
+	// enable the remove button if at least one selected task is unlocked
 	for (const auto &i : sel)
 		tasks.push_back(reinterpret_cast<StoredData *>(queueCtrl_->GetItemData(i))->task);
 
 	// compile error tasks into a string
 	std::vector<std::pair<std::string, std::vector<std::string>>> errorMessages;
 	std::transform(tasks.begin(), tasks.end(), std::back_inserter(errorMessages), [](Task *t) {
-		return t->error_ && !t->locked_ ? t->getError() : std::make_pair(t->path_, std::vector<std::string>{""});
+		return t->error_ && !t->locked_ ? t->getError() : std::make_pair(t->path_, std::vector<std::string>{});
 	});
 	errorMessages.erase(
 	    std::remove_if(errorMessages.begin(), errorMessages.end(),
@@ -564,7 +639,7 @@ void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
 	if (numErrors > 0) {
 		// only allow to reset status or view errors if the errors in the selection are more than 1
 		menu.Append(1, "Reset Status", nullptr);
-		menu.Append(2, "View Errors in Selection", nullptr);
+		menu.Append(2, "Show Error Details", nullptr);
 	}
 
 	if (numReady > 0) {
@@ -593,6 +668,8 @@ void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
 				t->setMode(static_cast<standards::standard>(evt.GetId() - 10));
 			}
 		}
+
+		evt.Skip();
 	});
 
 	// show the menu
@@ -604,15 +681,37 @@ void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
 void Frame::onChangeSelection(wxDataViewEvent &evt) {
 	// set the value of the choice dropdown to the mode value of the first item in the selecion
 	wxDataViewItemArray sel;
+	std::vector<Task *> tasks;
 	queueCtrl_->GetSelections(sel);
+
+	// store the selected items' task pointers
+	for (const auto &i : sel)
+		tasks.push_back(reinterpret_cast<StoredData *>(queueCtrl_->GetItemData(i))->task);
+
+	// enable if there are unlocked tasks in the selection
+	removeButton_->Enable(std::count_if(tasks.begin(), tasks.end(), [](Task *t) { return !t->locked_; }) > 0);
+
 	if (sel.empty())
 		return;
 
-	modeChoice_->SetSelection(reinterpret_cast<StoredData *>(queueCtrl_->GetItemData(sel.front()))->task->mode_);
+	// set selection of choice to the first non-locked, non-completed, non-erroneous item in the selection
+	auto                i    = tasks.begin();
+	standards::standard mode = (*i)->mode_;
+	while (((*i)->locked_ || (*i)->error_ || (*i)->completed_)) {
+		if ((++i) == tasks.end())
+			break;
+
+		mode = (*i)->mode_;
+	}
+
+	if (i != tasks.end())
+		modeChoice_->SetSelection(mode);
+	evt.Skip();
 }
 
 void Frame::onSetStatus(wxCommandEvent &evt) {
 	this->SetStatusText(evt.GetString());
+	evt.Skip();
 }
 
 void Frame::onHideStatus(wxCommandEvent &evt) {
@@ -620,6 +719,7 @@ void Frame::onHideStatus(wxCommandEvent &evt) {
 		GetStatusBar()->Hide();
 		SendSizeEvent();
 	}
+	evt.Skip();
 }
 
 void Frame::onShowStatus(wxCommandEvent &evt) {
@@ -627,4 +727,70 @@ void Frame::onShowStatus(wxCommandEvent &evt) {
 		GetStatusBar()->Show();
 		SendSizeEvent();
 	}
+	evt.Skip();
+}
+
+void Frame::onActivate(wxDataViewEvent &evt) {
+	// show the list of errors upon activation
+
+	// store the selected items' task pointers
+	std::vector<Task *> tasks;
+	wxDataViewItemArray sel;
+	queueCtrl_->GetSelections(sel);
+	for (const auto &i : sel)
+		tasks.push_back(reinterpret_cast<StoredData *>(queueCtrl_->GetItemData(i))->task);
+
+	// compile error tasks into a string
+	std::vector<std::pair<std::string, std::vector<std::string>>> errorMessages;
+	std::transform(tasks.begin(), tasks.end(), std::back_inserter(errorMessages), [](Task *t) {
+		return t->error_ && !t->locked_ ? t->getError() : std::make_pair(t->path_, std::vector<std::string>{});
+	});
+	errorMessages.erase(
+	    std::remove_if(errorMessages.begin(), errorMessages.end(),
+	                   [](const std::pair<std::string, std::vector<std::string>> &e) { return e.second.empty(); }),
+	    errorMessages.end());
+
+	if (!errorMessages.empty())
+		new ErrorDialog(this, borderSize_, scalingFactor_, errorMessages);
+
+	evt.Skip();
+}
+
+void Frame::viewDetails(wxCommandEvent &evt) {
+	// show the list of errors upon activation
+
+	// store the selected items' task pointers
+	std::vector<Task *> tasks = Task::getTasks();
+
+	// compile error tasks into a string
+	std::vector<std::pair<std::string, std::vector<std::string>>> errorMessages;
+	std::transform(tasks.begin(), tasks.end(), std::back_inserter(errorMessages), [](Task *t) {
+		return t->error_ && !t->locked_ ? t->getError() : std::make_pair(t->path_, std::vector<std::string>{});
+	});
+	errorMessages.erase(
+	    std::remove_if(errorMessages.begin(), errorMessages.end(),
+	                   [](const std::pair<std::string, std::vector<std::string>> &e) { return e.second.empty(); }),
+	    errorMessages.end());
+
+	if (!errorMessages.empty())
+		new ErrorDialog(this, borderSize_, scalingFactor_, errorMessages);
+
+	evt.Skip();
+}
+
+void Frame::removeSelected(wxCommandEvent &evt) {
+	wxDataViewItemArray sel;
+	queueCtrl_->GetSelections(sel);
+	std::vector<Task *> tasks;
+	for (const auto &i : sel)
+		tasks.push_back(reinterpret_cast<StoredData *>(queueCtrl_->GetItemData(i))->task);
+
+	for (Task *const t : tasks)
+		Task::removeByTaskPtr(t);
+	evt.Skip();
+}
+
+void Frame::displayInformation(wxCommandEvent &evt) {
+	wxMessageBox(standards::DESCRIPTIONS[modeChoice_->GetSelection()], standards::NAMES[modeChoice_->GetSelection()], 5L, this);
+	evt.Skip();
 }

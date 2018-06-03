@@ -51,7 +51,18 @@ const std::vector<std::vector<std::vector<unsigned char>>> STANDARDS = {
 const std::vector<std::string> NAMES = {
     "NIST SP-800-88 Rev. 1 (All Zeros)", "British HMG Infosec Standard 5, Baseline Standard (Random Bits)",
     "British HMG Infosec Standard 5, Enhanced Standard (Zeros, Ones, Random Bits)",
-    "Bruce Schneier's Algorithm (Ones, Zeros, 5×Random)", "Peter Gutmann's Algorithm (35-Pass)"};
-const std::vector<std::string> NAMES_SHORT = {"Zeros", "Random", "1, 0, R", "1, 0, 5×R", "35-Pass"};
+    "Bruce Schneier's Algorithm (Ones, Zeros, 5 Random Passes)", "Peter Gutmann's Algorithm (35-Pass)"};
+const std::vector<std::string> NAMES_SHORT  = {"Zeros", "Random", "Enhanced", "Schneier", "Gutmann"};
+const std::vector<std::string> DESCRIPTIONS = {
+    "This standard by the National Institution of Standards and Techonology overwrites data once with 0s. This should be "
+    "enough to wipe data from any modern disk, however floppy disks' data can still be recovered afterwards using forensic "
+    "analysis. This is the fastest method.",
+    "This standard overwrites with random data. This can be useful for hiding any presence of overwriting. This is slightly "
+    "slower than NIST SP-800-88 Rev. 1 as random bits must be generated.",
+    "This standard is slightly more secure and overwrites data 3 times: once with 0s, once with 1s and finally again with "
+    "random bits.",
+    "This method overwrites data with 0s, 1s and 5 rounds of random bits. In total it overwrites data 7 times.",
+    "This method is specifically designed to combat different magnetic encoding schemes. It overwrites data 35 times with "
+    "different values each time. It is the slowest but most secure out of all of these options."};
 enum standard { ZEROS, RANDOM, HMG, SCHNEIER, GUTMANN };
 } // namespace standards

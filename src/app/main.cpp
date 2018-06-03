@@ -11,7 +11,7 @@
 bool App::OnInit() {
 	// static std::mutex mut;
 	// try {
-	// 	Eraser::overwriteBytesMultiple("hello", 1024 * 512, standards::GUTMANN,
+	// 	GoodBye::overwriteBytesMultiple("hello", 1024 * 512, standards::GUTMANN,
 	// 	                               [&](size_t progress, size_t fileSize, size_t pass) -> void {
 	// 		                               std::lock_guard<std::mutex> lock(mut);
 	// 		                               std::cout << "pass:\t" << pass << "\tbytes written:\t" << progress
@@ -27,7 +27,10 @@ bool App::OnInit() {
 	// } catch (const std::runtime_error &e) {
 	// 	std::cout << e.what() << std::endl;
 	// }
+
+#ifdef _MSC_VER
 	SetProcessDPIAware();
+#endif
 	frame_ = new Frame();
 	return true;
 }

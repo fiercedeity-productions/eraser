@@ -3,7 +3,11 @@
 #include "dirtask.h"
 #include "lib.h"
 #include "updateprogressdata.h"
+#ifdef _MSC_VER
 #include <filesystem>
+#else
+#include <experimental/filesystem>
+#endif
 #include <iomanip>
 #include <numeric>
 #include <sstream>
@@ -39,7 +43,7 @@ const bool DirTask::isIncluded(const std::string &path) const {
 // 	size_t culminativeSize = 0;
 // 	size_t count           = 0;
 // 	for (const std::string &path : filePaths_) {
-// 		culminativeSize += Eraser::getSize(path);
+// 		culminativeSize += GoodBye::getSize(path);
 
 // 		if (!(++count % SKIP)) { // update gui every SKIP items
 // 			std::thread([=]() {
@@ -94,6 +98,7 @@ void DirTask::execute() {
 
 			if (frameInstance->paused_) {
 				updateStatus("Stopped");
+				updateProgressBar(0);
 				locked_    = false;
 				completed_ = false;
 				error_     = true;
@@ -107,7 +112,7 @@ void DirTask::execute() {
 			try {
 				std::thread(&DirTask::updateStatusBar, this, file.path().string() + "(...)").detach();
 				std::thread(&DirTask::updateStatus, this, "Writing...").detach(); // set to 0% as is calling next file
-				Eraser::overwriteBytesMultiple(
+				GoodBye::overwriteBytesMultiple(
 				    file.path().string(), 4096 * 1024, standards::STANDARDS[mode_],
 				    [&](size_t a, size_t b, size_t c) {
 					    double proportion =
@@ -127,6 +132,7 @@ void DirTask::execute() {
 					    } catch (std::experimental::filesystem::filesystem_error &e) {
 						    updateStatus("Error");
 						    error_ = true;
+						    updateProgressBar(0);
 
 						    errorMessage_ = file.path().string() + ": " + e.what();
 						    errorMessages_.push_back(errorMessage_);
@@ -137,8 +143,8 @@ void DirTask::execute() {
 				wxPuts("end");
 			} catch (std::runtime_error &e) {
 				updateStatus("Error");
+				updateProgressBar(0);
 				error_ = true;
-				// TODO: support resetting the status
 
 				// call the next task
 				errorMessage_ = file.path().string() + ": " + e.what();
@@ -166,6 +172,8 @@ void DirTask::execute() {
 				errorMessage_ = e.what();
 				errorMessages_.push_back(errorMessage_);
 			}
+		} else {
+			updateProgressBar(0);
 		}
 
 		// call the next task
@@ -189,7 +197,7 @@ void DirTask::execute() {
 // 		    std::experimental::filesystem::is_block_file(file.path().string()) ||
 // 		    std::experimental::filesystem::is_character_file(file.path().string())) {
 // 			filePaths_.push_back(file.path().string());
-// 			culminativeSize += Eraser::getSize(file.path().string());
+// 			culminativeSize += GoodBye::getSize(file.path().string());
 // 		}
 // 		if (!(++count % SKIP)) { // update gui every SKIP items
 // 			std::thread([=]() {

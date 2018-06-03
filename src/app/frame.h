@@ -3,6 +3,7 @@
 #include <wx/dataview.h>
 #include <wx/wx.h>
 
+#include <wx/appprogress.h>
 extern const wxEventTypeTag<wxCommandEvent> CALL_NEXT_TASK;
 extern const wxEventTypeTag<wxCommandEvent> UPDATE_VALUE;
 extern const wxEventTypeTag<wxCommandEvent> SET_STATUS;
@@ -21,16 +22,19 @@ class Frame : public wxFrame {
 	wxBoxSizer *addSizer_;
 	wxBoxSizer *controlsSizer_;
 
-	wxTextCtrl *      pathCtrl_;
-	wxButton *        addFiles_;
-	wxButton *        addFolder_;
-	wxButton *        controlButton_;
-	wxChoice *        modeChoice_;
-	wxDataViewColumn *queueCtrlCol1_, *queueCtrlCol2_, *queueCtrlCol3_, *queueCtrlCol4_, *queueCtrlCol5_;
+	wxTextCtrl *            pathCtrl_;
+	wxButton *              addFiles_;
+	wxButton *              addFolder_;
+	wxButton *              controlButton_;
+	wxChoice *              modeChoice_;
+	wxDataViewColumn *      queueCtrlCol1_, *queueCtrlCol2_, *queueCtrlCol3_, *queueCtrlCol4_, *queueCtrlCol5_;
+	wxButton *              removeButton_, *viewButton_, *informationButton_;
+	wxAppProgressIndicator *indicator_;
 
 	double borderSize_ = 8;
 	bool   allowEdits_;
 	bool   running_ = false;
+	bool   warn_    = true; // set true to warn user about harm when Start is pressed
 
 	void callNextTask(wxCommandEvent &evt);
 	void onQueueKeyDown(wxKeyEvent &evt);
@@ -41,6 +45,7 @@ class Frame : public wxFrame {
 
 	void onSize(wxSizeEvent &evt);
 	void onQueueContextMenu(wxDataViewEvent &evt);
+	void onActivate(wxDataViewEvent &evt);
 	void onEnter(wxCommandEvent &evt);
 	void onEdit(wxCommandEvent &evt);
 	void onKeyDown(wxKeyEvent &evt);
@@ -52,6 +57,10 @@ class Frame : public wxFrame {
 	void onSetStatus(wxCommandEvent &evt);
 	void onHideStatus(wxCommandEvent &evt);
 	void onShowStatus(wxCommandEvent &evt);
+
+	void removeSelected(wxCommandEvent &evt);
+	void viewDetails(wxCommandEvent &evt);
+	void displayInformation(wxCommandEvent &evt);
 
 	const std::vector<wxDataViewItem> getUnlockedSelections();
 

@@ -1,12 +1,12 @@
 #pragma once
 #include "frame.h"
 #include "standards.h"
-#include <deque>
+#include <vector>
 
 class Task {
   protected:
-	static Frame *            frameInstance;
-	static std::deque<Task *> tasks;
+	static Frame *             frameInstance;
+	static std::vector<Task *> tasks;
 
 	void   updateProgressBar(const double &proportion) const;
 	void   updateStatus(const std::string &status) const;
@@ -25,15 +25,15 @@ class Task {
 	standards::standard mode_;
 	std::string         errorMessage_;
 
-	static void                      setFrame(Frame *const frameInstance);
-	static void                      test();
-	static const wxDataViewItem &    add(const std::string &path, const standards::standard &mode = standards::ZEROS);
-	static const std::deque<Task *> &getTasks(); // to execute isIncluded on all items in the queue
-	static const bool                inQueue(const std::string &path);
-	static void                      empty();
-	static void                      removeByTaskPtr(Task *task);
-	static const bool                isEmpty(); // returns true if all tasks are completed/erroneous or tasks are emtpy
-	static const bool                callNext();
+	static void                       setFrame(Frame *const frameInstance);
+	static void                       test();
+	static const wxDataViewItem &     add(const std::string &path, const standards::standard &mode = standards::ZEROS);
+	static const std::vector<Task *> &getTasks(); // to execute isIncluded on all items in the queue
+	static const bool                 inQueue(const std::string &path);
+	static void                       empty();
+	static void                       removeByTaskPtr(Task *task);
+	static const bool                 isEmpty(); // returns true if all tasks are completed/erroneous or tasks are emtpy
+	static const bool                 callNext();
 
 	virtual const size_t getSize() const                                            = 0;
 	virtual const bool   isIncluded(const std::string &path) const                  = 0; // to prevent duplicate values
