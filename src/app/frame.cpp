@@ -2,6 +2,7 @@
 #include "frame.h"
 #include "errordialog.h"
 #include "generator.h"
+#include "icon.xpm"
 #include "standards.h"
 #include "storeddata.h"
 #include "task.h"
@@ -130,7 +131,10 @@ Frame::Frame()
 	queueCtrlCol4_->SetResizeable(false);
 	queueCtrlCol5_->SetResizeable(false);
 
+	SetIcon(icon);
 	CreateStatusBar();
+
+	// show
 	panel_->SetSizer(sizer_);
 	SetClientSize(800.0 * scalingFactor_, 600.0 * scalingFactor_);
 
