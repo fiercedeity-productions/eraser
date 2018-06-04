@@ -1,18 +1,15 @@
 cmake_minimum_required(VERSION 2.6)
 set(PROJECT_NAME goodbye)
 project(${PROJECT_NAME})
-set(BUILD_SHARED_LIBRARIES OFF)
-
 
 if (${CMAKE_C_COMPILER_ID} STREQUAL MSVC)
 set(CMAKE_CXX_FLAGS_DEBUG "-MTd -ZI -D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE")
 set(CMAKE_CXX_FLAGS_RELEASE "-MT -Ox -fp:fast -D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE")
 set(CMAKE_CXX_FLAGS_MINSIZEREL "-MT -Ox -fp:fast -D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE")
 elseif (${CMAKE_C_COMPILER_ID} STREQUAL GNU)
-set(CMAKE_CXX_FLAGS_DEBUG "-std=c++17 -static -Wall")
-set(CMAKE_CXX_FLAGS_RELEASE "-std=c++17 -static -s -Wall -Ofast")
-set(CMAKE_CXX_FLAGS_MINSIZEREL "-std=c++17 -static -s -Wall -Ofast")
-set(CMAKE_EXE_LINKER_FLAGS "-static")
+set(CMAKE_CXX_FLAGS_DEBUG "-std=c++17 -Wall")
+set(CMAKE_CXX_FLAGS_RELEASE "-std=c++17 -s -Wall -Ofast")
+set(CMAKE_CXX_FLAGS_MINSIZEREL "-std=c++17 -s -Wall -Ofast")
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/lib)
