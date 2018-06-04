@@ -127,11 +127,11 @@ Frame::Frame()
 	queueCtrlCol4_ = queueCtrl_->AppendTextColumn("Status", wxDATAVIEW_CELL_INERT, wxCOL_WIDTH_AUTOSIZE);
 	queueCtrlCol5_ = queueCtrl_->AppendProgressColumn("Progress", wxDATAVIEW_CELL_INERT, scalingFactor_ * 128);
 
-	queueCtrlCol1_->SetResizeable(false);
-	queueCtrlCol2_->SetResizeable(false);
-	queueCtrlCol3_->SetResizeable(false);
-	queueCtrlCol4_->SetResizeable(false);
-	queueCtrlCol5_->SetResizeable(false);
+	// queueCtrlCol1_->SetResizeable(false);
+	// queueCtrlCol2_->SetResizeable(false);
+	// queueCtrlCol3_->SetResizeable(false);
+	// queueCtrlCol4_->SetResizeable(false);
+	// queueCtrlCol5_->SetResizeable(false);
 
 	SetIcon(icon);
 	CreateStatusBar();
@@ -665,7 +665,15 @@ void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
 		for (std::string i : standards::NAMES) {
 			standardMenu->Append(id++, i, nullptr);
 		}
+
 		menu->Append(3, "Change Standard", standardMenu);
+		
+		// be safe for linux
+		standardMenu->Bind(wxEVT_COMMAND_MENU_SELECTED, [=](wxCommandEvent &evt) {
+			for (Task *const t : tasks) {
+				t->setMode(static_cast<standards::standard>(evt.GetId() - 10));
+			}
+		});
 	}
 
 	// programme the menu
