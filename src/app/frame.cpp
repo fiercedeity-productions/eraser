@@ -516,15 +516,15 @@ void Frame::addToQueue(std::string path) {
 }
 
 void Frame::resizeColumns() {
-	queueCtrlCol1_->SetWidth(wxCOL_WIDTH_AUTOSIZE);
-	queueCtrlCol2_->SetWidth(wxCOL_WIDTH_AUTOSIZE);
-	queueCtrlCol3_->SetWidth(wxCOL_WIDTH_AUTOSIZE);
-	queueCtrlCol4_->SetWidth(wxCOL_WIDTH_AUTOSIZE);
-	queueCtrlCol5_->SetWidth(wxCOL_WIDTH_AUTOSIZE);
+	// queueCtrlCol1_->SetWidth(wxCOL_WIDTH_AUTOSIZE);
+	// queueCtrlCol2_->SetWidth(wxCOL_WIDTH_AUTOSIZE);
+	// queueCtrlCol3_->SetWidth(wxCOL_WIDTH_AUTOSIZE);
+	// queueCtrlCol4_->SetWidth(wxCOL_WIDTH_AUTOSIZE);
+	// queueCtrlCol5_->SetWidth(wxCOL_WIDTH_AUTOSIZE);
 
-	queueCtrlCol1_->SetWidth(queueCtrl_->GetSize().GetX() - queueCtrlCol2_->GetWidth() - queueCtrlCol3_->GetWidth() -
-	                         queueCtrlCol4_->GetWidth() - (scalingFactor_ * 128));
-	queueCtrlCol5_->SetWidth(scalingFactor_ * 128);
+	// queueCtrlCol1_->SetWidth(queueCtrl_->GetSize().GetX() - queueCtrlCol2_->GetWidth() - queueCtrlCol3_->GetWidth() -
+	//                          queueCtrlCol4_->GetWidth() - (scalingFactor_ * 128));
+	// queueCtrlCol5_->SetWidth(scalingFactor_ * 128);
 }
 
 void Frame::onSize(wxSizeEvent &evt) {
@@ -667,7 +667,7 @@ void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
 		}
 
 		menu->Append(3, "Change Standard", standardMenu);
-		
+
 		// be safe for linux
 		standardMenu->Bind(wxEVT_COMMAND_MENU_SELECTED, [=](wxCommandEvent &evt) {
 			for (Task *const t : tasks) {
