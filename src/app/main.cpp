@@ -1,4 +1,3 @@
-#pragma once
 #include "main.h"
 #include "lib.h"
 #include "standards.h"
@@ -38,5 +37,5 @@ bool App::OnInit() {
 #ifdef NDEBUG
 IMPLEMENT_APP(App);
 #else
-IMPLEMENT_APP_CONSOLE(App);
+IMPLEMENT_APP_CONSOLE(App)
 #endif

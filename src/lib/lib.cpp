@@ -1,4 +1,3 @@
-#pragma once
 #include "lib.h"
 
 #ifdef _MSC_VER

@@ -1,5 +1,3 @@
-#pragma once
-
 #include "task.h"
 #include "dirtask.h"
 #include "filetask.h"
@@ -43,8 +41,8 @@ const std::vector<Task *> &Task::getTasks() {
 }
 
 Task::Task(const std::string &path, const standards::standard &mode)
-    : mode_(mode)
-    , locked_(false)
+    : locked_(false)
+    , mode_(mode)
     , completed_(false)
     , error_(false) {
 

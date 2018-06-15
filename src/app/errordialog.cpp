@@ -1,4 +1,3 @@
-#pragma once
 #include "errordialog.h"
 #include "generator.h"
 #include <wx/clipbrd.h>
@@ -16,7 +15,7 @@ ErrorDialog::ErrorDialog(wxFrame *parent, double borderSize, double scalingFacto
 	wxBoxSizer *sizer = new wxBoxSizer(wxVERTICAL);
 	wxBoxSizer *label = Generator::createLabel(panel, borderSize, scalingFactor, "Errors");
 	list_             = new wxListCtrl(panel, wxID_VIEW_LIST, wxDefaultPosition, wxDefaultSize,
-                           wxLC_REPORT & ~wxLC_HRULES | wxLC_VRULES | wxLC_NO_HEADER);
+                           wxLC_REPORT & ~(wxLC_HRULES | wxLC_VRULES | wxLC_NO_HEADER));
 
 	list_->AppendColumn("Path");
 	list_->AppendColumn("Errors");

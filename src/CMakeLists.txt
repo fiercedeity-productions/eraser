@@ -7,9 +7,9 @@ set(CMAKE_CXX_FLAGS_DEBUG "/MDd -ZI -D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO
 set(CMAKE_CXX_FLAGS_RELEASE "/MD -Ox -fp:fast -D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE")
 set(CMAKE_CXX_FLAGS_MINSIZEREL "/MD -Ox -fp:fast -D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE")
 elseif (${CMAKE_C_COMPILER_ID} STREQUAL GNU)
-set(CMAKE_CXX_FLAGS_DEBUG "-std=c++17 -Wall -ggdb")
-set(CMAKE_CXX_FLAGS_RELEASE "-std=c++17 -s -Wall -Ofast")
-set(CMAKE_CXX_FLAGS_MINSIZEREL "-std=c++17 -s -Wall -Ofast")
+set(CMAKE_CXX_FLAGS_DEBUG "-std=c++17 -Wall -ggdb -pedantic")
+set(CMAKE_CXX_FLAGS_RELEASE "-std=c++17 -s -Wall -Ofast -pedantic")
+set(CMAKE_CXX_FLAGS_MINSIZEREL "-std=c++17 -s -Wall -Ofast -pedantic")
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/lib)

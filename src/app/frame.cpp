@@ -1,4 +1,3 @@
-#pragma once
 #include "frame.h"
 #include "errordialog.h"
 #include "generator.h"
@@ -320,10 +319,10 @@ void Frame::onChangeText(wxCommandEvent &evt) {
 	pathCtrl_->SetSelection(selBeg, selEnd);
 
 	// calculate the current element being edited
-	size_t editBeg =
+	long editBeg =
 	    userValue.substr(0, ins).find_last_of(';') == std::string::npos ? 0 : userValue.substr(0, ins).find_last_of(';');
-	size_t editEnd = editBeg + 1 +
-	                 (editBeg + 1 >= userValue.length() || userValue.substr(editBeg + 1).find_first_of(';') == std::string::npos
+	long editEnd = editBeg + 1 +
+	                 (static_cast<size_t>(editBeg) + 1 >= userValue.length() || userValue.substr(editBeg + 1).find_first_of(';') == std::string::npos
 	                      ? userValue.substr(editBeg + 1).length()
 	                      : userValue.substr(editBeg + 1).find_first_of(';'));
 
@@ -580,7 +579,7 @@ void Frame::onQueueChanged(wxDataViewEvent &evt) {
 void Frame::onQueueChanged() {
 	resizeColumns();
 	// enable or disable the start button depending on whether there are tasks
-	controlButton_->Enable(!running_ && !Task::isEmpty() || running_);
+	controlButton_->Enable((!running_ && !Task::isEmpty()) || running_);
 	// if there are errors, enable the view button
 	viewButton_->Enable(
 	    std::count_if(Task::getTasks().begin(), Task::getTasks().end(), [](Task *t) { return t->error_ && !t->locked_; }) > 0);
@@ -609,13 +608,9 @@ void Frame::onQueueChanged() {
 void Frame::onUpdateValue(wxCommandEvent &evt) {
 	std::unique_lock<std::mutex> lk(mut);
 
-	UpdateProgressData *data = reinterpret_cast<UpdateProgressData *>(evt.GetClientData());
-
 	queueCtrl_->SetValue(reinterpret_cast<UpdateProgressData *>(evt.GetClientData())->value,
 	                     reinterpret_cast<UpdateProgressData *>(evt.GetClientData())->row,
 	                     reinterpret_cast<UpdateProgressData *>(evt.GetClientData())->col);
-
-	// std::cout << "value " << data->value << " row " << data->row << " column " << data->col << std::endl;
 	evt.Skip();
 }
 
@@ -688,7 +683,7 @@ void Frame::onQueueContextMenu(wxDataViewEvent &evt) {
 			}
 		} else if (evt.GetId() == 2) {
 			new ErrorDialog(dynamic_cast<wxFrame *>(this), borderSize_, scalingFactor_, errorMessages);
-		} else if (evt.GetId() >= 10 && evt.GetId() < 10 + standards::STANDARDS.size()) { // change standard
+		} else if (evt.GetId() >= 10 && evt.GetId() < static_cast<int>(10 + standards::STANDARDS.size())) { // change standard
 			for (Task *const t : tasks) {
 				t->setMode(static_cast<standards::standard>(evt.GetId() - 10));
 			}

@@ -1,5 +1,3 @@
-#pragma once
-
 #include "dirtask.h"
 #include "lib.h"
 #include "updateprogressdata.h"

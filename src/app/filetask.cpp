@@ -1,4 +1,3 @@
-#pragma once
 #include "filetask.h"
 #include "lib.h"
 #ifdef _MSC_VER
@@ -30,7 +29,7 @@ const bool FileTask::isIncluded(const std::string &path) const {
 
 const size_t FileTask::getSize() const {
 	return GoodBye::getSize(path_);
-};
+}
 
 void FileTask::execute() {
 	updateStatus("Writing...");
