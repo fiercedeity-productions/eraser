@@ -24,9 +24,7 @@ file(GLOB APP_SOURCES ${CMAKE_SOURCE_DIR}/app/*.cpp)
 file(GLOB APP_RESOURCES ${CMAKE_SOURCE_DIR}/app/*.rc)
 
 add_library(${PROJECT_NAME} SHARED ${LIB_HEADERS} ${LIB_SOURCES})
-
 add_executable(start-${PROJECT_NAME} ${APP_HEADERS} ${APP_SOURCES} ${APP_RESOURCES})
-
 
 target_link_libraries(start-${PROJECT_NAME} ${PROJECT_NAME})
 set_target_properties(start-${PROJECT_NAME} PROPERTIES CXX_STANDARD 17)
